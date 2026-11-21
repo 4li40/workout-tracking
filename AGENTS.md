@@ -11,3 +11,5 @@ Convex agent skills for common tasks can be installed by running
 `npx convex ai-files install`.
 
 <!-- convex-ai-end -->
+
+Product requirements live in `prd.md` (loaded automatically as an OpenCode instruction via `opencode.jsonc`). Treat it as the single source of truth for scope, features, data model, and success criteria.
