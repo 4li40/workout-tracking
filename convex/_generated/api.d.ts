@@ -9,7 +9,10 @@
  */
 
 import type * as auth from "../auth.js";
-import type * as myFunctions from "../myFunctions.js";
+import type * as lib_auth from "../lib/auth.js";
+import type * as lib_globalExercises from "../lib/globalExercises.js";
+import type * as lib_validators from "../lib/validators.js";
+import type * as seed from "../seed.js";
 import type * as users from "../users.js";
 
 import type {
@@ -20,7 +23,10 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   auth: typeof auth;
-  myFunctions: typeof myFunctions;
+  "lib/auth": typeof lib_auth;
+  "lib/globalExercises": typeof lib_globalExercises;
+  "lib/validators": typeof lib_validators;
+  seed: typeof seed;
   users: typeof users;
 }>;
 

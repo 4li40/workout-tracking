@@ -1,15 +1,16 @@
 import { convexAuthNextjsProxy, nextjsProxyRedirect } from "@/lib/convexAuth";
-
-const signInPages = ["/signin"];
-const protectedPages = ["/", "/server"];
+import { getAuthRedirectTarget, isAuthApiRoute } from "@/lib/routeGuard";
 
 export default convexAuthNextjsProxy(async (request, { isAuthenticated }) => {
   const { pathname } = request.nextUrl;
-  if (signInPages.includes(pathname) && (await isAuthenticated())) {
-    return nextjsProxyRedirect(request, "/");
+  if (isAuthApiRoute(pathname)) {
+    return;
   }
-  if (protectedPages.includes(pathname) && !(await isAuthenticated())) {
-    return nextjsProxyRedirect(request, "/signin");
+
+  const authenticated = await isAuthenticated();
+  const redirectTarget = getAuthRedirectTarget(pathname, authenticated);
+  if (redirectTarget !== null) {
+    return nextjsProxyRedirect(request, redirectTarget);
   }
 });
 
