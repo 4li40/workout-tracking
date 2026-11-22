@@ -111,7 +111,7 @@ function CompletedWorkoutSummary({
             </div>
             <div>
               <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-                Working sets
+                Sets
               </p>
               <p className="text-sm font-semibold text-foreground tabular-nums">
                 {summary.completedSets}

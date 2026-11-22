@@ -115,7 +115,7 @@ export function triggerRestTimerCompletionCue(soundEnabled: boolean): void {
         }
       }
     } catch {
-      // Ignore browser autoplay restrictions.
+      return;
     }
   }
 

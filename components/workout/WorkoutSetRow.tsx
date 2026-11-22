@@ -209,7 +209,7 @@ export function WorkoutSetRow({
         current === capturedRepsDraft ? null : current,
       );
     } catch {
-      // Error banner and local draft preservation are handled by ActiveWorkoutLogger.
+      return;
     }
   }
 

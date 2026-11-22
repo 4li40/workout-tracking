@@ -46,7 +46,13 @@ export function RestTimerBar({
   onRestart,
   busy,
 }: RestTimerBarProps) {
-  const [nowMs, setNowMs] = useState(() => Date.now());
+  const [clock, setClock] = useState<{
+    readonly forEndsAt: number | undefined;
+    readonly nowMs: number;
+  }>(() => ({
+    forEndsAt: restTimerEndsAt,
+    nowMs: Date.now(),
+  }));
   const [soundEnabled, setSoundEnabled] = useState(() =>
     readRestSoundEnabled(),
   );
@@ -63,12 +69,17 @@ export function RestTimerBar({
 
   useEffect(() => {
     if (restTimerEndsAt === undefined) {
-      return;
+      const clearId = window.setTimeout(() => {
+        setClock({ forEndsAt: undefined, nowMs: Date.now() });
+      }, 0);
+      return () => {
+        window.clearTimeout(clearId);
+      };
     }
 
     const syncClock = () => {
       const currentNow = Date.now();
-      setNowMs(currentNow);
+      setClock({ forEndsAt: restTimerEndsAt, nowMs: currentNow });
       if (
         currentNow >= restTimerEndsAt &&
         lastAlertedEndsAtRef.current !== restTimerEndsAt
@@ -107,8 +118,13 @@ export function RestTimerBar({
     };
   }, [completedAlertEndsAt]);
 
+  const clockFreshForNewTimer =
+    clock.forEndsAt === restTimerEndsAt ||
+    (clock.forEndsAt !== undefined && clock.forEndsAt > clock.nowMs);
   const remainingMs =
-    restTimerEndsAt !== undefined ? Math.max(0, restTimerEndsAt - nowMs) : 0;
+    restTimerEndsAt !== undefined && clockFreshForNewTimer
+      ? Math.max(0, restTimerEndsAt - clock.nowMs)
+      : 0;
   const isRunning = restTimerEndsAt !== undefined && remainingMs > 0;
   const showCompletedBanner =
     !isRunning &&
