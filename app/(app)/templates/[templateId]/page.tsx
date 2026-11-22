@@ -14,8 +14,8 @@ import {
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { type FormEvent, useEffect, useId, useRef, useState } from "react";
+import { ExercisePickerDialog } from "@/components/exercises/ExercisePickerDialog";
 import { DeleteTemplateDialog } from "@/components/templates/DeleteTemplateDialog";
-import { ExercisePickerDialog } from "@/components/templates/ExercisePickerDialog";
 import { TemplateExerciseRow } from "@/components/templates/TemplateExerciseRow";
 import { TemplateRouteErrorBoundary } from "@/components/templates/TemplateRouteErrorBoundary";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -50,6 +50,7 @@ function TemplateDetailContent({
 
   const updateTitle = useMutation(api.templates.updateTitle);
   const duplicateTemplate = useMutation(api.templates.duplicate);
+  const addTemplateExercise = useMutation(api.templates.addExercise);
   const reorderExercises = useMutation(api.templates.reorderExercises);
   const removeExercise = useMutation(api.templates.removeExercise);
   const startWorkout = useMutation(api.workouts.startWorkout);
@@ -531,8 +532,21 @@ function TemplateDetailContent({
       <ExercisePickerDialog
         open={pickerOpen}
         onOpenChange={setPickerOpen}
-        templateId={loadedTemplate._id}
+        mode="multi"
+        resetKey={loadedTemplate._id}
+        title="Add exercises"
+        description="Tap Add on as many exercises as you need for this routine."
+        actionLabel="Add"
+        busyActionLabel="Adding..."
+        existingLabel="In routine"
         existingExerciseIds={existingExerciseIds}
+        onSelectExercise={async (exerciseId) => {
+          await addTemplateExercise({
+            templateId: loadedTemplate._id,
+            exerciseId,
+          });
+        }}
+        errorFallback="Could not add exercise to routine. Please try again."
       />
 
       <DeleteTemplateDialog

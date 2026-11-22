@@ -1,6 +1,6 @@
 "use client";
 
-import { useConvexAuth, useMutation, useQuery } from "convex/react";
+import { useConvexAuth, useQuery } from "convex/react";
 import { Check, Plus, RotateCcw, Search, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { ExerciseFormDialog } from "@/components/exercises/ExerciseFormDialog";
@@ -39,25 +39,47 @@ const SCOPE_OPTIONS: ReadonlyArray<{
   { value: "global", label: "Global" },
 ];
 
-interface ExercisePickerDialogProps {
+export interface ExercisePickerDialogProps {
   readonly open: boolean;
   readonly onOpenChange: (open: boolean) => void;
-  readonly templateId: Id<"workoutTemplates">;
+  readonly mode: "multi" | "single";
+  readonly resetKey: string;
+  readonly title: string;
+  readonly description: string;
+  readonly actionLabel: string;
+  readonly busyActionLabel?: string;
+  readonly existingLabel?: string;
   readonly existingExerciseIds: ReadonlySet<Id<"exercises">>;
+  readonly excludeExerciseId?: Id<"exercises">;
+  readonly onSelectExercise: (exerciseId: Id<"exercises">) => Promise<void>;
+  readonly errorFallback: string;
 }
 
 function ExercisePickerBody({
-  templateId,
+  mode,
+  actionLabel,
+  busyActionLabel,
+  existingLabel,
   existingExerciseIds,
+  excludeExerciseId,
+  onSelectExercise,
+  errorFallback,
+  onClose,
   onBusyChange,
 }: {
-  readonly templateId: Id<"workoutTemplates">;
+  readonly mode: "multi" | "single";
+  readonly actionLabel: string;
+  readonly busyActionLabel?: string;
+  readonly existingLabel?: string;
   readonly existingExerciseIds: ReadonlySet<Id<"exercises">>;
+  readonly excludeExerciseId?: Id<"exercises">;
+  readonly onSelectExercise: (exerciseId: Id<"exercises">) => Promise<void>;
+  readonly errorFallback: string;
+  readonly onClose: () => void;
   readonly onBusyChange: (busy: boolean) => void;
 }) {
   const { isAuthenticated } = useConvexAuth();
   const exercises = useQuery(api.exercises.list, isAuthenticated ? {} : "skip");
-  const addExercise = useMutation(api.templates.addExercise);
 
   const [search, setSearch] = useState("");
   const [scope, setScope] = useState<ExerciseScopeFilter>("all");
@@ -66,9 +88,9 @@ function ExercisePickerBody({
   const [createOpen, setCreateOpen] = useState(false);
   const [highlightedExerciseId, setHighlightedExerciseId] =
     useState<Id<"exercises"> | null>(null);
-  const [addingExerciseId, setAddingExerciseId] =
+  const [selectingExerciseId, setSelectingExerciseId] =
     useState<Id<"exercises"> | null>(null);
-  const [addedThisSession, setAddedThisSession] = useState<
+  const [selectedThisSession, setSelectedThisSession] = useState<
     ReadonlySet<Id<"exercises">>
   >(() => new Set());
   const [error, setError] = useState<string | null>(null);
@@ -83,7 +105,11 @@ function ExercisePickerBody({
     if (exercises === undefined) {
       return [];
     }
-    const filtered = filterExercises(exercises, {
+    const availableExercises =
+      excludeExerciseId === undefined
+        ? exercises
+        : exercises.filter((item) => item._id !== excludeExerciseId);
+    const filtered = filterExercises(availableExercises, {
       search,
       scope,
       muscleGroup,
@@ -102,7 +128,15 @@ function ExercisePickerBody({
       highlighted,
       ...filtered.filter((item) => item._id !== highlightedExerciseId),
     ];
-  }, [exercises, search, scope, muscleGroup, equipment, highlightedExerciseId]);
+  }, [
+    exercises,
+    excludeExerciseId,
+    search,
+    scope,
+    muscleGroup,
+    equipment,
+    highlightedExerciseId,
+  ]);
 
   useEffect(() => {
     return () => {
@@ -117,33 +151,36 @@ function ExercisePickerBody({
     setEquipment("all");
   }
 
-  async function handleAdd(exerciseId: Id<"exercises">) {
-    if (addingExerciseId !== null) {
+  async function handleSelect(exerciseId: Id<"exercises">) {
+    if (selectingExerciseId !== null) {
       return;
     }
 
-    setAddingExerciseId(exerciseId);
+    setSelectingExerciseId(exerciseId);
     onBusyChange(true);
     setError(null);
     try {
-      await addExercise({ templateId, exerciseId });
-      setAddedThisSession((previous) => {
+      await onSelectExercise(exerciseId);
+      if (mode === "single") {
+        onBusyChange(false);
+        onClose();
+        return;
+      }
+      setSelectedThisSession((previous) => {
         const next = new Set(previous);
         next.add(exerciseId);
         return next;
       });
     } catch (err) {
-      setError(
-        getConvexErrorMessage(
-          err,
-          "Could not add exercise to routine. Please try again.",
-        ),
-      );
+      setError(getConvexErrorMessage(err, errorFallback));
     } finally {
-      setAddingExerciseId(null);
+      setSelectingExerciseId(null);
       onBusyChange(false);
     }
   }
+
+  const activeBusyLabel =
+    busyActionLabel ?? (mode === "single" ? "Selecting..." : "Adding...");
 
   return (
     <div className="space-y-4">
@@ -182,7 +219,7 @@ function ExercisePickerBody({
             value={search}
             onChange={(event) => setSearch(event.target.value)}
             placeholder="Search exercises..."
-            aria-label="Search exercises to add"
+            aria-label="Search exercises"
             className="pl-10 pr-11"
           />
           {search.length > 0 && (
@@ -308,10 +345,17 @@ function ExercisePickerBody({
           </div>
         ) : (
           filteredExercises.map((exercise) => {
-            const isAdding = addingExerciseId === exercise._id;
-            const inRoutine = existingExerciseIds.has(exercise._id);
-            const addedNow = addedThisSession.has(exercise._id);
+            const isSelecting = selectingExerciseId === exercise._id;
+            const alreadyIncluded = existingExerciseIds.has(exercise._id);
+            const selectedNow = selectedThisSession.has(exercise._id);
             const isNew = highlightedExerciseId === exercise._id;
+
+            let buttonLabel = actionLabel;
+            if (isSelecting) {
+              buttonLabel = activeBusyLabel;
+            } else if (mode === "multi" && alreadyIncluded) {
+              buttonLabel = `${actionLabel} again`;
+            }
 
             return (
               <div
@@ -328,13 +372,16 @@ function ExercisePickerBody({
                       {exercise.name}
                     </p>
                     {isNew && <Badge variant="accent">New</Badge>}
-                    {addedNow ? (
+                    {selectedNow ? (
                       <Badge variant="success">
                         <Check className="size-3" aria-hidden="true" />
                         Added
                       </Badge>
                     ) : (
-                      inRoutine && <Badge variant="secondary">In routine</Badge>
+                      alreadyIncluded &&
+                      existingLabel !== undefined && (
+                        <Badge variant="secondary">{existingLabel}</Badge>
+                      )
                     )}
                   </div>
                   <div className="flex flex-wrap items-center gap-1.5">
@@ -356,14 +403,14 @@ function ExercisePickerBody({
                 <Button
                   type="button"
                   size="sm"
-                  variant={inRoutine ? "secondary" : "default"}
-                  disabled={addingExerciseId !== null}
+                  variant={alreadyIncluded ? "secondary" : "default"}
+                  disabled={selectingExerciseId !== null}
                   onClick={() => {
-                    void handleAdd(exercise._id);
+                    void handleSelect(exercise._id);
                   }}
                   className="shrink-0"
                 >
-                  {isAdding ? "Adding..." : inRoutine ? "Add again" : "Add"}
+                  {buttonLabel}
                 </Button>
               </div>
             );
@@ -387,8 +434,17 @@ function ExercisePickerBody({
 export function ExercisePickerDialog({
   open,
   onOpenChange,
-  templateId,
+  mode,
+  resetKey,
+  title,
+  description,
+  actionLabel,
+  busyActionLabel,
+  existingLabel,
   existingExerciseIds,
+  excludeExerciseId,
+  onSelectExercise,
+  errorFallback,
 }: ExercisePickerDialogProps) {
   const [busy, setBusy] = useState(false);
 
@@ -403,17 +459,22 @@ export function ExercisePickerDialog({
     >
       <DialogContent closeDisabled={busy} className="sm:max-w-2xl">
         <DialogHeader>
-          <DialogTitle>Add exercises</DialogTitle>
-          <DialogDescription>
-            Tap Add on as many exercises as you need for this routine.
-          </DialogDescription>
+          <DialogTitle>{title}</DialogTitle>
+          <DialogDescription>{description}</DialogDescription>
         </DialogHeader>
 
         {open && (
           <ExercisePickerBody
-            key={templateId}
-            templateId={templateId}
+            key={resetKey}
+            mode={mode}
+            actionLabel={actionLabel}
+            busyActionLabel={busyActionLabel}
+            existingLabel={existingLabel}
             existingExerciseIds={existingExerciseIds}
+            excludeExerciseId={excludeExerciseId}
+            onSelectExercise={onSelectExercise}
+            errorFallback={errorFallback}
+            onClose={() => onOpenChange(false)}
             onBusyChange={setBusy}
           />
         )}
