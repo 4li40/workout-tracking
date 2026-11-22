@@ -1,6 +1,6 @@
 const SIGN_IN_PATH = "/signin";
 const AUTH_PREFIX = "/auth";
-const DEFAULT_AUTHENTICATED_PATH = "/";
+const DEFAULT_AUTHENTICATED_PATH = "/workouts";
 
 function normalizePathname(pathname: string): string {
   if (pathname.length > 1 && pathname.endsWith("/")) {
@@ -22,7 +22,7 @@ function isAuthApiRoute(pathname: string): boolean {
  * Fail-closed route protection decision.
  *
  * Every route outside `/signin` and `/auth/*` requires an authenticated
- * session. Authenticated requests to `/signin` redirect to `/`.
+ * session. Authenticated requests to `/signin` redirect to `/workouts`.
  */
 export function getAuthRedirectTarget(
   pathname: string,
