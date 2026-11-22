@@ -17,6 +17,7 @@ import type * as lib_settings from "../lib/settings.js";
 import type * as lib_starterTemplates from "../lib/starterTemplates.js";
 import type * as lib_templates from "../lib/templates.js";
 import type * as lib_validators from "../lib/validators.js";
+import type * as lib_workouts from "../lib/workouts.js";
 import type * as seed from "../seed.js";
 import type * as templates from "../templates.js";
 import type * as userSettings from "../userSettings.js";
@@ -39,6 +40,7 @@ declare const fullApi: ApiFromModules<{
   "lib/starterTemplates": typeof lib_starterTemplates;
   "lib/templates": typeof lib_templates;
   "lib/validators": typeof lib_validators;
+  "lib/workouts": typeof lib_workouts;
   seed: typeof seed;
   templates: typeof templates;
   userSettings: typeof userSettings;
