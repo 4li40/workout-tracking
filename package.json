@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "convex dev --run seed:seedGlobalExercises --start 'next dev'",
+    "dev": "convex dev --start 'convex run seed:seedGlobalExercises && next dev'",
     "typecheck": "tsc --noEmit",
     "build": "npm run typecheck && next build",
     "start": "next start",
@@ -15,9 +15,11 @@
   "dependencies": {
     "@convex-dev/auth": "^2.0.0",
     "convex": "^1.51.0",
+    "lucide-react": "^1.77.0",
     "next": "16.4.5",
     "react": "^19.2.8",
-    "react-dom": "^19.2.8"
+    "react-dom": "^19.2.8",
+    "recharts": "^3.11.0"
   },
   "devDependencies": {
     "@convex-dev/eslint-plugin": "^5.0.0",

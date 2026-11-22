@@ -17,7 +17,7 @@ export interface SeedGlobalExercisesResult {
   total: number;
 }
 
-export const GLOBAL_EXERCISES: readonly GlobalExerciseSeed[] = [
+export const GLOBAL_EXERCISES = [
   // Chest
   {
     slug: "barbell-bench-press",
@@ -373,7 +373,9 @@ export const GLOBAL_EXERCISES: readonly GlobalExerciseSeed[] = [
     equipment: "bodyweight",
     isBodyweight: true,
   },
-];
+] as const satisfies readonly GlobalExerciseSeed[];
+
+export type GlobalExerciseSlug = (typeof GLOBAL_EXERCISES)[number]["slug"];
 
 const GLOBAL_EXERCISE_SCAN_LIMIT = 500;
 

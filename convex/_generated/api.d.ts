@@ -11,8 +11,12 @@
 import type * as auth from "../auth.js";
 import type * as lib_auth from "../lib/auth.js";
 import type * as lib_globalExercises from "../lib/globalExercises.js";
+import type * as lib_settings from "../lib/settings.js";
+import type * as lib_starterTemplates from "../lib/starterTemplates.js";
 import type * as lib_validators from "../lib/validators.js";
 import type * as seed from "../seed.js";
+import type * as templates from "../templates.js";
+import type * as userSettings from "../userSettings.js";
 import type * as users from "../users.js";
 
 import type {
@@ -25,8 +29,12 @@ declare const fullApi: ApiFromModules<{
   auth: typeof auth;
   "lib/auth": typeof lib_auth;
   "lib/globalExercises": typeof lib_globalExercises;
+  "lib/settings": typeof lib_settings;
+  "lib/starterTemplates": typeof lib_starterTemplates;
   "lib/validators": typeof lib_validators;
   seed: typeof seed;
+  templates: typeof templates;
+  userSettings: typeof userSettings;
   users: typeof users;
 }>;
 
