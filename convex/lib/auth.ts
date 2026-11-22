@@ -15,16 +15,12 @@ export type UserOwnedTableName =
   | "sets"
   | "exerciseRecords";
 
+// Fails to compile if any table in UserOwnedTableName lacks a `userId` field,
+// which keeps the cast in `requireOwnedById` honest.
 type AssertAllUserOwnedTablesHaveUserId<T extends { userId: Id<"users"> }> = T;
 type VerifiedUserOwnedDoc = AssertAllUserOwnedTablesHaveUserId<
   Doc<UserOwnedTableName>
 >;
-
-export async function getOptionalAuthUserId(
-  ctx: QueryCtx | MutationCtx,
-): Promise<Id<"users"> | null> {
-  return await getAuthUserId(ctx);
-}
 
 export async function requireAuthUserId(
   ctx: QueryCtx | MutationCtx,

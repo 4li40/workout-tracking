@@ -9,11 +9,11 @@ function normalizePathname(pathname: string): string {
   return pathname;
 }
 
-export function isSignInRoute(pathname: string): boolean {
+function isSignInRoute(pathname: string): boolean {
   return normalizePathname(pathname) === SIGN_IN_PATH;
 }
 
-export function isAuthApiRoute(pathname: string): boolean {
+function isAuthApiRoute(pathname: string): boolean {
   const normalized = normalizePathname(pathname);
   return normalized === AUTH_PREFIX || normalized.startsWith(`${AUTH_PREFIX}/`);
 }

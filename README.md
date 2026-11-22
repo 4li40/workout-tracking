@@ -19,6 +19,18 @@ npm install
 npm run dev
 ```
 
+This project needs npm 11 or newer (Node 24 ships it). npm 10 cannot install `package-lock.json`.
+
+## Seeding the exercise library
+
+The shared global exercise library is seeded by the idempotent internal mutation `seed:seedGlobalExercises`. `npm run dev` runs it on every start against your dev deployment. Running it again inserts nothing new and only corrects drifted rows.
+
+For a production deployment, run it once after the first deploy and again whenever `convex/lib/globalExercises.ts` changes:
+
+```
+npx convex run seed:seedGlobalExercises --prod
+```
+
 If you're reading this README on GitHub and want to use this template, run:
 
 ```
