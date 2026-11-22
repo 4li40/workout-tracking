@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "convex dev --run seed:seedGlobalExercises --start 'next dev'",
+    "dev": "convex dev --start 'convex run seed:seedGlobalExercises && next dev'",
     "typecheck": "tsc --noEmit",
     "build": "npm run typecheck && next build",
     "start": "next start",
