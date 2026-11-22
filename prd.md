@@ -1,143 +1,143 @@
-# Product Requirements Document (PRD): Progressive Overload Workout Tracker
+# Product requirements document: Progressive overload workout tracker
 
-**Version:** 1.1  
-**Status:** Draft (Pending Open Questions)  
-**Target Stack:** Next.js (App Router) + Convex + Convex Auth  
+Version 1.2
+Status: Finalized
+Target stack: Next.js App Router, Convex, and Convex Auth with username and password
 
----
+## 1. Product overview
 
-## 1. Product Overview
+### Problem statement
 
-### Problem Statement
-Tracking strength training in a generic Notes app breaks down as soon as progressive overload becomes the goal. Finding last week's working weights requires scrolling through unstructured text, calculating total volume or spotting rep PRs is manual, and there is no built-in rest timing or visual trendline to confirm whether strength is actually progressing across weeks.
+Tracking strength training in a notes app breaks down when progressive overload is the goal. Finding last week's weights requires scrolling through unstructured text. Calculating session volume or spotting personal records is manual. A notes app has no built-in rest timer and no progression chart to confirm week-over-week gains.
 
-### Product Vision
-A fast, mobile-first web application purpose-built for progressive strength training. Every screen is optimized to minimize friction between sets, surface previous performance directly inline while logging, and make week-over-week progression unmistakable.
+### Product vision
 
-### Core Objectives
-* **Eliminate logging friction:** Log a completed set (weight, reps, and rest timer trigger) in under 5 seconds with one hand.
-* **Surface progressive overload at the point of action:** Show the previous session's exact numbers inline for every set so the target to beat is always visible.
-* **Turn raw logs into progression insights:** Automatically compute volume, estimated 1-rep max (e1RM), and personal records (PRs) per exercise.
+This project is a mobile-first web app built for progressive strength training. Every screen minimizes taps between sets, shows prior performance inline while you log, and tracks linear weight progression over time.
 
----
+### Core objectives
 
-## 2. Target User & Core Use Cases
+- Log a completed set with weight, reps, and rest timer start in under 5 seconds with one hand.
+- Show the previous session's numbers inline on every set row so the target to beat is visible at the point of entry.
+- Compute working volume, estimated 1-rep max (e1RM), bodyweight rep records, and personal records (PRs) automatically for every exercise.
 
-* **Primary User:** A strength-focused lifter training consistently who needs a reliable, distraction-free gym log on a phone browser (or installed PWA) and deeper analytics on desktop.
-* **Primary Context:** Mid-workout on a gym floor with sweaty hands, short rest windows (60–180 seconds), and occasionally spotty Wi-Fi.
+## 2. Target user and core use cases
 
-### Key User Journeys
-1. **Pre-Workout Setup:** Create reusable workout templates (e.g., Push, Pull, Legs) with ordered exercises, target set counts, and rep ranges, or start an empty freestyle session.
-2. **In-Gym Execution:** Launch today's session, view last session's weight/reps as ghost placeholders on each row, log each set as it finishes, trigger an automatic rest timer, and get immediate visual confirmation when beating a previous mark.
-3. **Post-Workout Review:** Review session summary (duration, total volume lifted, PRs hit) and inspect multi-week progression charts for specific lifts to adjust upcoming targets.
+The primary user is a lifter who trains regularly and logs workouts on a phone browser or installed PWA, then reviews history and charts on mobile or desktop. Most logging happens on a gym floor with short rest windows of 60 to 180 seconds and normal phone signal or Wi-Fi.
 
----
+### Key user journeys
 
-## 3. Functional Requirements
+1. Sign up with a username and password, choose `kg` or `lb`, and receive seeded exercises plus starter workout templates.
+2. Start a session from a saved template or launch a blank freestyle workout with equal ease.
+3. Log sets against inline previous-session numbers, run the automatic rest timer, and see progression indicators and PR badges immediately.
+4. Finish the workout, optionally update the source template with structural changes, and review workout history and per-exercise progression charts.
 
-### Phase 1: MVP (Core Loop)
+## 3. Functional requirements
 
-#### 3.1 Authentication & Session Management
-* **Sign-In Methods:** Support one or more native Convex Auth methods—OAuth (Google, Apple, GitHub), Passkeys, Username + Password, or Email + Password.
-  * *Scope note:* Choosing **OAuth** or **Passkeys** avoids needing a transactional email service for MVP, whereas **Email + Password** requires pairing with an email provider (e.g., Resend) for verification and password reset links.
-* **Persistent Gym Sessions:** Keep users signed in across browser restarts and PWA launches via `httpOnly` refresh cookies so lifters are never kicked to a login screen mid-workout.
-* **Route Protection:** Guard all workout logging, template, and progression routes behind authentication, while keeping sign-in, sign-up, and OAuth/verification callback routes publicly accessible.
+### Phase 1: MVP
 
-#### 3.2 Exercise Library & Workout Templates
-* **Exercise Management:** Pre-seeded core compound and isolation lifts plus custom exercise creation (name, primary muscle group, equipment type, optional notes).
-* **Workout Templates:** Create, edit, reorder, and duplicate routines containing a list of exercises, default number of sets, target rep range (e.g., 8–10 reps), and default rest duration per exercise.
-* **Session Launch:** Start a live workout directly from a template (pre-populating all exercises and set rows) or start a blank workout and add exercises on the fly.
+#### 3.1 Authentication, multi-user onboarding, and session management
 
-#### 3.3 Active Workout Logger
-* **Inline Previous Performance:** Every set row displays the corresponding set from the most recent completed session of that exercise (e.g., `Prev: 80 kg x 8`) right beside the active inputs.
-* **Fast Set Entry:** Numeric inputs for weight and reps, one-tap copy-from-previous or quick-increment steppers (+1 rep, +2.5 kg / +5 lb), and a prominent completion toggle per set.
-* **Set Tagging:** Distinguish between **Warm-up**, **Working**, **Drop**, and **Failure** sets (warm-up sets are excluded from PR and working-volume calculations by default).
-* **Live Rest Timer:** Automatically starts when a working set is checked off, anchored in a persistent bottom/top bar with `-15s`, `+15s`, `Skip`, and audible/vibration completion cues.
-* **Exercise Notes:** Sticky per-exercise notes (e.g., seat pin height, cue reminders) that persist across sessions, separate from single-session notes.
-* **Real-Time Auto-Save:** Every logged set persists immediately so accidental tab refreshes or locked screens never drop workout data.
-* **Mid-Workout Flexibility:** Reorder exercises, add/remove sets, or swap an exercise mid-session without altering the underlying template (with an optional prompt at finish: *"Update template with today's changes?"*).
+- **Username and password sign-in.** Keep the existing `@convex-dev/auth` username and password setup in `convex/auth.ts`, `lib/serverAuth.ts`, and `app/signin/page.tsx`. No OAuth provider or transactional email service is needed for MVP.
+- **Multi-user onboarding.** Every new account gets its own `userSettings` row and a set of starter templates, such as Push, Pull, and Legs, referencing the shared global exercise library. First-time users pick their preferred weight unit (`kg` or `lb`) during onboarding and can change it later in Settings.
+- **Persistent sessions.** Keep users signed in across browser restarts and PWA launches with `httpOnly` refresh cookies so lifters are not signed out mid-workout.
+- **Fail-closed route protection.** Update `proxy.ts` to protect every route except `/signin` and `/auth/*` so new pages under `app/(app)` are never exposed publicly by mistake.
 
-#### 3.4 Progressive Overload Tracking & History
-* **Automatic Progression Indicators:** Visual indicator on a completed set when it beats the prior session's weight, reps at the same weight, or set volume.
-* **PR Detection Engine:** Automatically flag:
-  * **Weight PR:** Heaviest load lifted for the exercise.
-  * **Estimated 1RM PR:** Calculated via the Epley formula: $\text{e1RM} = w \times \left(1 + \frac{r}{30}\right)$, where $w$ is weight and $r$ is reps.
-  * **Session Volume PR:** Highest total working volume ($\sum w \times r$) achieved for that exercise in a single workout.
-* **Workout History:** Reverse-chronological log of completed workouts showing date, title, duration, total working sets, total volume, and PR count, with full edit/delete capability for fixing typos later.
-* **Exercise Progression Dashboard:** Per-exercise view with interactive time-series charts for:
-  * Estimated 1RM trend
-  * Top-set weight trend
-  * Total working volume per session
+#### 3.2 Exercise library and workout templates
 
----
+- **Global and custom exercises.** Seed a core library of compound, isolation, and bodyweight lifts. Let each user create custom exercises with `name`, `muscleGroup`, `equipment`, and an `isBodyweight` flag.
+- **Bodyweight exercise support.** Exercises marked `isBodyweight: true`, such as pull-ups and dips, allow `weight = 0` for bodyweight-only sets or a positive value for added external load.
+- **Workout templates.** Let users create, edit, reorder, duplicate, and delete templates containing ordered exercises, default set counts, target rep counts or ranges, and default rest durations.
+- **Equal-priority session launch.** Give **Start from template** and **Start freestyle workout** equal prominence on the workouts home screen. Users run both flows regularly.
 
-### Phase 2: Post-MVP Enhancements
-* **Double Progression Targets:** Auto-suggest next session's target (e.g., *"Hit 10 reps on all 3 sets last time — increase weight by 2.5 kg today"*).
-* **Superset & Circuit Grouping:** Visually link paired exercises and adjust rest timer behavior between alternating sets.
-* **RPE / RIR Tracking:** Optional Rate of Perceived Exertion (1–10) or Reps in Reserve (0–5) column.
-* **Plate Calculator:** Quick modal showing exact barbell plate loading per side for a target weight.
-* **Data Export & Import:** One-click JSON/CSV export so workout history is never locked in.
+#### 3.3 Active workout logger
 
----
+- **Single active workout invariant.** Enforce at most one `in_progress` workout per user in Convex. Show a persistent resume bar across app pages whenever a session is active.
+- **Inline previous performance.** Display the matching set from the user's most recent completed session of that exercise beside the active inputs, such as `Prev: 80 kg x 8`. Match by `setType` and ordinal within that type, such as working set 1 against prior working set 1, so changing warm-up count does not shift working targets.
+- **Unit-aware fast entry.** Render weights in the user's preferred Settings unit (`kg` or `lb`) with numeric keypads, one-tap copy-from-previous, quick steppers (`+1 rep`, `+2.5 kg` or `+5 lb`), and a prominent completion toggle.
+- **Set tagging.** Support four set types: `warmup`, `working`, `drop`, and `failure`. Exclude `warmup` sets from PRs and working-volume calculations.
+- **Live rest timer.** Start the timer automatically when a working set is checked off. Anchor controls (`-15s`, `+15s`, `Skip`) in a persistent bar, trigger audio or vibration cues on completion, and compute remaining time from a persisted `restTimerEndsAt` timestamp so screen locks and reloads stay accurate.
+- **Private sticky exercise notes.** Store per-user cues, such as seat pin height, separately from global exercise rows and separately from single-session workout notes.
+- **Auto-save and local draft recovery.** Persist every set change through Convex optimistic updates and keep a lightweight local draft of the active workout in `localStorage` for brief signal drops. Full offline mutation queuing across closed browser tabs is out of scope for MVP.
+- **Mid-workout edits.** Allow reordering exercises, adding or removing sets, and swapping exercises without modifying the underlying template. On finish, offer **Update template with today's changes** to sync structural edits (exercise list, order, target set count, and rest duration) back to the template.
 
-## 4. Conceptual Data Model
+#### 3.4 Progressive overload tracking and history
 
-Designed for Convex's document-relational model with indexed queries for fast previous-session lookups and native Convex Auth integration:
+- **Linear progression indicators.** Highlight completed sets that beat the previous session's weight, beat reps at the same weight, or beat set volume. Surface linear next-session weight targets based on prior working sets and the user's unit increment (`+2.5 kg` or `+5 lb`).
+- **PR detection engine.** Track four PR types for non-warmup sets:
+  - **Weight PR.** Heaviest load lifted for an exercise (or heaviest added load for bodyweight exercises).
+  - **Estimated 1RM PR.** Computed with the Epley formula `e1RM = w * (1 + r / 30)` for sets with `w > 0`.
+  - **Bodyweight Rep PR.** Highest reps in a single set at `weight = 0` for `isBodyweight` exercises.
+  - **Session Volume PR.** Highest total working volume `sum(w * r)` in one session for weighted lifts, or highest total working reps in one session for zero-weight bodyweight sets.
+- **Accurate PR recalculation.** Recompute affected exercise PR records whenever a workout finishes, is edited, or is deleted so history fixes never leave stale PR flags.
+- **Workout history.** Show completed workouts in reverse chronological order with date, title, duration, working set count, total volume, and PR count. Support full edit and delete on past workouts.
+- **Exercise progression dashboard.** Provide per-exercise interactive time-series charts for e1RM, top-set weight, working volume per session, and max reps per set for bodyweight exercises.
 
-| Table | Purpose | Key Fields & Relationships |
+### Phase 2: Post-MVP enhancements
+
+- Double progression targets and automated rep-range progression rules.
+- Superset and circuit grouping with alternating rest timer behavior.
+- Optional RPE (1 to 10) or RIR (0 to 5) column per set.
+- Barbell plate loading calculator modal.
+- One-click JSON and CSV data export and import.
+
+## 4. Data model
+
+All application tables live in `convex/schema.ts` alongside the tables managed by `@convex-dev/auth`. Store weights canonically in kilograms (`weightKg`) along with `enteredUnit` so switching between `kg` and `lb` in Settings converts historical values cleanly without corrupting stored numbers.
+
+| Table | Purpose | Key fields and indexes |
 |---|---|---|
-| **users** *(Convex Auth-managed)* | Core identity & auth accounts | Managed natively by Convex Auth alongside its session tables—no external identity provider ID sync required. |
-| **userSettings** *(1:1 with `users`)* | App-specific training preferences | User ID (`users` reference), preferred unit (`kg` or `lb`), default rest timer duration, progression preferences. Kept separate from `users` to avoid coupling auth schema updates with app settings. |
-| **exercises** | Global + user-defined movements | User ID (nullable for defaults), name, muscle group, equipment, sticky setup notes |
-| **workoutTemplates** | Reusable routine definitions | User ID, title, sort order, last performed timestamp |
-| **templateExercises** | Ordered lifts inside a template | Template ID, exercise ID, order index, target set count, target rep range, rest seconds |
-| **workouts** | Individual workout sessions | User ID, template ID (optional), title, status (`in_progress` / `completed`), started/finished timestamps, session notes |
-| **workoutExercises** | Exercises performed in a session | Workout ID, exercise ID, order index, rest seconds override |
-| **sets** | Individual logged sets | Workout exercise ID, exercise ID (denormalized for fast history indexing), set number, set type, weight, reps, RPE (optional), completed boolean, PR flags |
+| `users` | Auth identity managed by Convex Auth | Managed by `@convex-dev/auth` |
+| `userSettings` | Per-user preferences and onboarding state | `userId`, `unit` (`"kg" \| "lb"`), `defaultRestSeconds`, `onboardingCompleted`. Index: `by_user` |
+| `exercises` | Global seeded lifts and user custom lifts | `userId` (optional; absent for global lifts), `name`, `muscleGroup`, `equipment`, `isBodyweight`. Indexes: `by_user`, `by_muscleGroup` |
+| `userExerciseNotes` | Private per-user sticky cues on any exercise | `userId`, `exerciseId`, `notes`. Index: `by_user_exercise` |
+| `workoutTemplates` | Reusable workout routines per user | `userId`, `title`, `sortOrder`, `lastPerformedAt`. Index: `by_user_order` |
+| `templateExercises` | Ordered exercises inside a template | `userId`, `templateId`, `exerciseId`, `orderIndex`, `targetSets`, `targetReps`, `restSeconds`. Index: `by_template_order` |
+| `workouts` | Individual live and completed sessions | `userId`, `templateId` (optional), `title`, `status` (`"in_progress" \| "completed"`), `startedAt`, `finishedAt`, `notes`, `restTimerEndsAt`. Indexes: `by_user_status`, `by_user_finishedAt` |
+| `workoutExercises` | Exercises performed in a workout | `userId`, `workoutId`, `exerciseId`, `orderIndex`, `restSeconds`, `workoutStatus`, `completedAt`. Indexes: `by_workout_order`, `by_user_exercise_completedAt` |
+| `sets` | Logged sets for each workout exercise | `userId`, `workoutId`, `workoutExerciseId`, `exerciseId`, `setNumber`, `setType`, `weightKg`, `enteredUnit`, `reps`, `completed`, `completedAt`. Indexes: `by_workoutExercise_number`, `by_user_exercise_completedAt` |
+| `exerciseRecords` | Materialized PR state per user and exercise | `userId`, `exerciseId`, `bestWeightKg`, `bestE1rmKg`, `bestSessionVolumeKg`, `bestBodyweightReps`, `updatedAt`. Index: `by_user_exercise` |
 
----
+## 5. UX, ergonomics, and design system
 
-## 5. UX, Ergonomics & Design System
+- **Mobile-first ergonomics.** Place primary actions (checking off a set, stepping weight and reps, adjusting the rest timer) within thumb reach with tap targets of at least 44 by 44 px and numeric mobile keyboards.
+- **Visual identity.** Use a light-first white and blue design modeled after `hevy.com`, built with the Figtree typeface and clean high-contrast surfaces:
+  - Page canvas `#F7F9FB`, card and navigation surface `#FFFFFF`, subtle input and secondary surface `#F2F4F7`, hairline borders `#E5E7EB`.
+  - Primary text `#191A1B` and secondary text `#667085`.
+  - Primary accent blue `#008CFF` (hover `#0077DB`, soft active tint `#EBF5FF`) for primary buttons, active navigation items, links, and active rest timer progress.
+  - Status accents: completed set green `#16A34A` with soft wash `#ECFDF3`, PR badge amber `#D97706` with soft tint `#FEF3C7`, and destructive red `#EF4444`.
+- **Responsive navigation.** Use a fixed white bottom navigation bar on mobile (`< md`) and a fixed white left sidebar on desktop (`>= md`) with five primary destinations: **Workouts** (templates plus freestyle launch), **History**, **Progress**, **Exercises**, and **Settings**. Active items highlight in `#008CFF`.
+- **Focused active workout layout.** Keep the logger centered on the current exercise, inline `Prev` numbers, weight and rep inputs, and a persistent rest timer bar. Move secondary actions (delete set, swap exercise, exercise history) into drawers or menus.
 
-* **Mobile-First Gym Ergonomics:** All primary actions (checking off a set, adjusting weight/reps, modifying rest timer) sit within thumb reach with generous tap targets (minimum 44x44 px) and trigger numeric keypads automatically.
-* **Visual Identity — Athletic Slate & Ember:** Dark-first interface tailored for bright overhead gym lighting and low eye strain. Deep slate surfaces establish visual hierarchy, crisp off-white typography ensures readability at arm's length, and high-energy ember accents highlight active rest timers, completed sets, and PR badges.
-* **Zero-Clutter Hierarchy:** Keep the active workout view focused strictly on the current exercise, previous numbers, inputs, and timer—defer secondary controls (delete set, swap exercise, view history) into clean drawers or popovers.
+## 6. Tech stack
 
----
-
-## 6. Recommended Tech Stack
-
-**Next.js (App Router)** paired with **Convex** provides real-time reactive queries, automatic TypeScript end-to-end types, and instant optimistic updates so logging a set feels immediate without manual REST endpoints or cache invalidation logic.
-
-| Layer | Recommendation | Why It Fits This App |
+| Layer | Choice | Reason |
 |---|---|---|
-| **Framework** | **Next.js (App Router) + React** | Handles routing, SSR/preloading of initial workout views, and client interactivity cleanly alongside Convex React hooks. |
-| **Backend & Database** | **Convex** | Real-time state sync across devices, built-in optimistic updates for snappy set logging, and reactive queries for live PR/volume totals. |
-| **Authentication** | **Convex Auth (`@convex-dev/auth`)** | Runs natively inside your Convex backend so user accounts and sessions live directly alongside your workout tables with zero third-party sync overhead. Integrates with Next.js App Router via auth route handlers (`/auth/signin`, `/auth/refresh`, `/auth/signout`) that keep refresh tokens secure in `httpOnly` cookies. |
-| **Language & Validation** | **TypeScript + Convex Validators (`v`) + Zod** | Strict end-to-end type safety, Convex runtime validation on mutations, and Zod + React Hook Form for complex client forms (templates, custom exercises). |
-| **Styling & Components** | **Tailwind CSS v4 + shadcn/ui + Lucide Icons** | Full ownership of accessible UI primitives (drawers, dialogs, tabs, toggles) styled cleanly with custom Athletic Slate & Ember CSS tokens. |
-| **Charts & Analytics** | **shadcn/ui Charts (Recharts)** | Composable, responsive line and bar charts styled natively with Tailwind tokens for e1RM and volume progression graphs. |
-| **Mobile Experience** | **PWA (Web App Manifest + Service Worker)** | Lets users install the site to their phone's home screen with full-screen standalone display and an app-like feel without building a separate native app. |
-| **Hosting & Deployment** | **Vercel + Convex Cloud** | Zero-friction CI/CD preview deployments and fast edge delivery for Next.js paired with managed Convex infrastructure. |
+| Framework | Next.js App Router and React 19 | Routing, layouts, and client interactivity with Convex React hooks |
+| Backend and database | Convex | Reactive queries, optimistic updates, indexed lookups, and end-to-end TypeScript types |
+| Authentication | `@convex-dev/auth` with username and password | Already configured in the repository with `httpOnly` cookie refresh handlers and zero external credentials |
+| Validation | TypeScript and Convex `v` validators | Strict runtime and compile-time checks at every backend boundary without adding Zod or React Hook Form for MVP |
+| Styling and components | Tailwind CSS v4, shadcn/ui, and Lucide icons | Owned accessible UI components styled with white and `#008CFF` blue tokens and Figtree typography |
+| Charts | Recharts with shadcn/ui chart wrappers | Responsive time-series line and bar charts for progression dashboards |
+| Mobile installability | Web App Manifest and PWA icons | Full-screen home-screen install experience on mobile browsers |
 
----
+## 7. Non-functional requirements and success criteria
 
-## 7. Non-Functional Requirements & Success Criteria
+- **Perceived speed.** Checking off a set updates the UI in under 50 ms through optimistic updates and syncs to Convex automatically.
+- **Session resilience.** An active workout survives page reloads, app switching, and screen locks without dropping sets or resetting the rest timer.
+- **Success metrics.**
+  - Replace the notes app for 100 percent of weekly workouts.
+  - Keep average time to log a set under 5 seconds.
+  - Lose zero workouts to accidental refreshes or brief connectivity drops.
 
-* **Perceived Speed:** Checking off a set updates UI state instantaneously via optimistic updates (under 50ms perceived latency) and syncs reliably once network connectivity is available.
-* **Session Resilience:** An in-progress workout survives browser reloads, app switching (e.g., changing music mid-workout), and screen locks without resetting the rest timer (timer calculates elapsed time against a saved start timestamp rather than an in-memory tick counter).
-* **Success Metrics:**
-  * Complete transition off the Notes app for 100% of weekly workouts.
-  * Average time to log a set stays under 5 seconds.
-  * Zero lost workout sessions due to accidental refreshes or brief connectivity drops.
+## 8. Finalized product decisions
 
----
+All initial product questions are resolved for MVP:
 
-## 8. Open Questions to Finalize This PRD
-
-1. **Auth Sign-In Method:** Which Convex Auth sign-in method(s) should be included for MVP (e.g., Google OAuth only for fastest setup, Passkeys, or Email + Password)?
-2. **Progression Style:** Do you follow a specific progressive overload method (e.g., *Double Progression* where you work up from 8 to 12 reps before adding weight, linear weight increases every session, or RPE/RIR-based training)?
-3. **Weight Units:** Do you train strictly in `kg` or `lb`, or do you need per-exercise unit overrides (for example, `kg` on barbells and `lb` on cable machines)?
-4. **Gym Connectivity:** Does your gym have total dead zones where full offline logging and background sync is a must-have for MVP, or do you generally have signal/Wi-Fi where optimistic updates + local draft recovery is enough?
-5. **Workout Structure:** Do you follow a fixed rotating split (e.g., Push/Pull/Legs or Upper/Lower) where launching from templates is 90% of your sessions, or do you frequently log freestyle workouts?
-6. **Single-User vs. Multi-User:** Are you building this strictly as a personal tool for yourself first, or do you want multi-user onboarding (sign-up flows, pre-populated starter templates for new users) built into the MVP from day one?
+1. **Auth method.** Username and password via the existing `@convex-dev/auth` implementation.
+2. **Weight units.** Support both `kg` and `lb`, selected globally in Settings and stored safely via canonical `weightKg` plus `enteredUnit`.
+3. **Connectivity.** Convex optimistic updates plus a lightweight local active-workout draft; no full offline mutation queue in MVP.
+4. **Progression style.** Linear weight progression across sessions, with double progression deferred to Phase 2.
+5. **Bodyweight movements.** Supported via `isBodyweight` exercises allowing `0` weight or added load, including bodyweight rep PR tracking.
+6. **User scope.** Multi-user from day one, including per-user onboarding, private exercise notes, and starter templates for new accounts.
+7. **Workout flow.** Templates and freestyle workouts have equal priority on the main workout screen.
+8. **Visual style and navigation.** Light-first white and `#008CFF` blue palette modeled after `hevy.com`, using a bottom navigation bar on mobile and a left sidebar on desktop.
