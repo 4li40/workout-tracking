@@ -440,14 +440,11 @@ export const remove = mutation({
     const userId = await requireAuthUserId(ctx);
     await requireOwnedById(ctx, "workoutTemplates", args.templateId, userId);
 
-    const rows = await ctx.db
+    for await (const row of ctx.db
       .query("templateExercises")
       .withIndex("by_template_order", (q) =>
         q.eq("templateId", args.templateId),
-      )
-      .take(MAX_TEMPLATE_EXERCISES);
-
-    for (const row of rows) {
+      )) {
       if (row.userId === userId) {
         await ctx.db.delete("templateExercises", row._id);
       }

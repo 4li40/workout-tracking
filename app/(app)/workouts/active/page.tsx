@@ -241,14 +241,14 @@ export default function ActiveWorkoutPage() {
       )}
 
       <Dialog
-        open={discardOpen}
+        open={discardOpen && activeWorkout !== null}
         onOpenChange={(nextOpen) => {
           if (!discarding) {
             setDiscardOpen(nextOpen);
           }
         }}
       >
-        <DialogContent>
+        <DialogContent closeDisabled={discarding}>
           <DialogHeader>
             <DialogTitle>Discard active workout</DialogTitle>
             <DialogDescription>{activeWorkout?.title}</DialogDescription>

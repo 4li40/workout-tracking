@@ -2,7 +2,7 @@
 
 import { useConvexAuth, useMutation, useQuery } from "convex/react";
 import { Check, Plus, RotateCcw, Search, X } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ExerciseFormDialog } from "@/components/exercises/ExerciseFormDialog";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -49,9 +49,11 @@ interface ExercisePickerDialogProps {
 function ExercisePickerBody({
   templateId,
   existingExerciseIds,
+  onBusyChange,
 }: {
   readonly templateId: Id<"workoutTemplates">;
   readonly existingExerciseIds: ReadonlySet<Id<"exercises">>;
+  readonly onBusyChange: (busy: boolean) => void;
 }) {
   const { isAuthenticated } = useConvexAuth();
   const exercises = useQuery(api.exercises.list, isAuthenticated ? {} : "skip");
@@ -102,6 +104,12 @@ function ExercisePickerBody({
     ];
   }, [exercises, search, scope, muscleGroup, equipment, highlightedExerciseId]);
 
+  useEffect(() => {
+    return () => {
+      onBusyChange(false);
+    };
+  }, [onBusyChange]);
+
   function resetFilters() {
     setSearch("");
     setScope("all");
@@ -115,6 +123,7 @@ function ExercisePickerBody({
     }
 
     setAddingExerciseId(exerciseId);
+    onBusyChange(true);
     setError(null);
     try {
       await addExercise({ templateId, exerciseId });
@@ -132,6 +141,7 @@ function ExercisePickerBody({
       );
     } finally {
       setAddingExerciseId(null);
+      onBusyChange(false);
     }
   }
 
@@ -380,9 +390,18 @@ export function ExercisePickerDialog({
   templateId,
   existingExerciseIds,
 }: ExercisePickerDialogProps) {
+  const [busy, setBusy] = useState(false);
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-2xl">
+    <Dialog
+      open={open}
+      onOpenChange={(nextOpen) => {
+        if (!busy) {
+          onOpenChange(nextOpen);
+        }
+      }}
+    >
+      <DialogContent closeDisabled={busy} className="sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>Add exercises</DialogTitle>
           <DialogDescription>
@@ -395,6 +414,7 @@ export function ExercisePickerDialog({
             key={templateId}
             templateId={templateId}
             existingExerciseIds={existingExerciseIds}
+            onBusyChange={setBusy}
           />
         )}
       </DialogContent>

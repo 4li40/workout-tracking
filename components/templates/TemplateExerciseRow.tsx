@@ -35,7 +35,7 @@ interface TemplateExerciseRowProps {
   readonly item: TemplateExerciseItem;
   readonly index: number;
   readonly totalCount: number;
-  readonly reordering: boolean;
+  readonly listBusy: boolean;
   readonly onMoveUp: () => void;
   readonly onMoveDown: () => void;
   readonly onRemove: () => void;
@@ -46,7 +46,7 @@ export function TemplateExerciseRow({
   item,
   index,
   totalCount,
-  reordering,
+  listBusy,
   onMoveUp,
   onMoveDown,
   onRemove,
@@ -84,7 +84,16 @@ export function TemplateExerciseRow({
     (draftReps !== null && draftReps.trim() !== serverReps) ||
     (draftRest !== null && draftRest.trim() !== serverRest);
 
-  const busy = saving || removing || reordering;
+  const trimmedRestPreview = currentRest.trim();
+  const parsedRestPreview = parseRestSeconds(
+    trimmedRestPreview === "" ? Number.NaN : Number(trimmedRestPreview),
+  );
+  const displayRestSeconds =
+    parsedRestPreview.kind === "ok"
+      ? parsedRestPreview.seconds
+      : item.restSeconds;
+
+  const busy = saving || removing || listBusy;
 
   function showSavedBadge() {
     setSaved(true);
@@ -190,6 +199,15 @@ export function TemplateExerciseRow({
   }
 
   function handleSelectRestPreset(seconds: number) {
+    const hasOtherDraftChanges =
+      (draftSets !== null && draftSets !== item.targetSets) ||
+      (draftReps !== null && draftReps.trim() !== serverReps);
+    if (seconds === item.restSeconds && !hasOtherDraftChanges) {
+      setDraftRest(null);
+      setError(null);
+      return;
+    }
+
     setError(null);
     setSaved(false);
 
@@ -346,7 +364,7 @@ export function TemplateExerciseRow({
                   const next = event.target.value;
                   setError(null);
                   setSaved(false);
-                  setDraftReps(next.trim() === serverReps ? null : next);
+                  setDraftReps(next === serverReps ? null : next);
                 }}
               />
             </div>
@@ -361,7 +379,7 @@ export function TemplateExerciseRow({
                 Rest timer (seconds)
               </Label>
               <Badge variant="accent" className="tabular-nums">
-                {formatRestDuration(item.restSeconds)}
+                {formatRestDuration(displayRestSeconds)}
               </Badge>
             </div>
 
@@ -411,7 +429,7 @@ export function TemplateExerciseRow({
                   const next = event.target.value;
                   setError(null);
                   setSaved(false);
-                  setDraftRest(next.trim() === serverRest ? null : next);
+                  setDraftRest(next === serverRest ? null : next);
                 }}
                 className="w-24 flex-1 bg-secondary text-center text-base font-semibold tabular-nums focus-visible:bg-card sm:flex-none"
               />

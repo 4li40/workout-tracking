@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation } from "convex/react";
-import { type FormEvent, useId, useState } from "react";
+import { type FormEvent, useEffect, useId, useState } from "react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
@@ -41,12 +41,14 @@ interface ExerciseFormDialogProps {
 
 function ExerciseFormBody({
   mode,
-  onOpenChange,
+  onClose,
   onCreated,
+  onBusyChange,
 }: {
   readonly mode: ExerciseFormMode;
-  readonly onOpenChange: (open: boolean) => void;
+  readonly onClose: () => void;
   readonly onCreated?: (exerciseId: Id<"exercises">) => void;
+  readonly onBusyChange: (busy: boolean) => void;
 }) {
   const createExercise = useMutation(api.exercises.create);
   const updateExercise = useMutation(api.exercises.update);
@@ -70,6 +72,12 @@ function ExerciseFormBody({
   const equipmentId = useId();
   const bodyweightId = useId();
 
+  useEffect(() => {
+    return () => {
+      onBusyChange(false);
+    };
+  }, [onBusyChange]);
+
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (submitting) {
@@ -83,6 +91,7 @@ function ExerciseFormBody({
     }
 
     setSubmitting(true);
+    onBusyChange(true);
     setError(null);
     try {
       if (mode.kind === "create") {
@@ -102,7 +111,8 @@ function ExerciseFormBody({
           isBodyweight,
         });
       }
-      onOpenChange(false);
+      onBusyChange(false);
+      onClose();
     } catch (err) {
       setError(
         getConvexErrorMessage(
@@ -113,6 +123,7 @@ function ExerciseFormBody({
         ),
       );
       setSubmitting(false);
+      onBusyChange(false);
     }
   }
 
@@ -190,25 +201,25 @@ function ExerciseFormBody({
         </div>
       </div>
 
-      <label
-        htmlFor={bodyweightId}
-        className="flex cursor-pointer items-center justify-between gap-4 rounded-xl border border-border bg-secondary/60 px-4 py-3"
-      >
-        <div className="space-y-0.5">
+      <div className="flex items-center justify-between gap-4 rounded-xl border border-border bg-secondary/60 px-4 py-3">
+        <Label
+          htmlFor={bodyweightId}
+          className="flex flex-1 cursor-pointer flex-col items-start gap-0.5 font-normal"
+        >
           <span className="block text-sm font-medium text-foreground">
             Bodyweight movement
           </span>
           <span className="block text-xs text-muted-foreground">
             Allows 0 weight for bodyweight-only sets or added external load.
           </span>
-        </div>
+        </Label>
         <Switch
           id={bodyweightId}
           checked={isBodyweight}
           disabled={submitting}
           onCheckedChange={setIsBodyweight}
         />
-      </label>
+      </div>
 
       {error !== null && (
         <Alert variant="destructive">
@@ -221,7 +232,7 @@ function ExerciseFormBody({
           type="button"
           variant="outline"
           disabled={submitting}
-          onClick={() => onOpenChange(false)}
+          onClick={onClose}
         >
           Cancel
         </Button>
@@ -245,6 +256,8 @@ export function ExerciseFormDialog({
   mode,
   onCreated,
 }: ExerciseFormDialogProps) {
+  const [busy, setBusy] = useState(false);
+
   const formKey = !open
     ? "closed"
     : mode.kind === "edit"
@@ -252,8 +265,15 @@ export function ExerciseFormDialog({
       : "create";
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+    <Dialog
+      open={open}
+      onOpenChange={(nextOpen) => {
+        if (!busy) {
+          onOpenChange(nextOpen);
+        }
+      }}
+    >
+      <DialogContent closeDisabled={busy}>
         <DialogHeader>
           <DialogTitle>
             {mode.kind === "create"
@@ -271,8 +291,9 @@ export function ExerciseFormDialog({
           <ExerciseFormBody
             key={formKey}
             mode={mode}
-            onOpenChange={onOpenChange}
+            onClose={() => onOpenChange(false)}
             onCreated={onCreated}
+            onBusyChange={setBusy}
           />
         )}
       </DialogContent>

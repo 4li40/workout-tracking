@@ -2,7 +2,7 @@
 
 import { useMutation } from "convex/react";
 import { useRouter } from "next/navigation";
-import { type FormEvent, useId, useState } from "react";
+import { type FormEvent, useEffect, useId, useState } from "react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
@@ -32,9 +32,11 @@ interface CreateTemplateDialogProps {
 function CreateTemplateForm({
   onClose,
   onCreated,
+  onBusyChange,
 }: {
   readonly onClose: () => void;
   readonly onCreated?: (templateId: Id<"workoutTemplates">) => void;
+  readonly onBusyChange: (busy: boolean) => void;
 }) {
   const createTemplate = useMutation(api.templates.create);
   const router = useRouter();
@@ -42,6 +44,12 @@ function CreateTemplateForm({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const titleId = useId();
+
+  useEffect(() => {
+    return () => {
+      onBusyChange(false);
+    };
+  }, [onBusyChange]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -56,9 +64,11 @@ function CreateTemplateForm({
     }
 
     setSubmitting(true);
+    onBusyChange(true);
     setError(null);
     try {
       const templateId = await createTemplate({ title: parsed.title });
+      onBusyChange(false);
       onClose();
       if (onCreated !== undefined) {
         onCreated(templateId);
@@ -73,6 +83,7 @@ function CreateTemplateForm({
         ),
       );
       setSubmitting(false);
+      onBusyChange(false);
     }
   }
 
@@ -130,9 +141,18 @@ export function CreateTemplateDialog({
   onOpenChange,
   onCreated,
 }: CreateTemplateDialogProps) {
+  const [busy, setBusy] = useState(false);
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+    <Dialog
+      open={open}
+      onOpenChange={(nextOpen) => {
+        if (!busy) {
+          onOpenChange(nextOpen);
+        }
+      }}
+    >
+      <DialogContent closeDisabled={busy}>
         <DialogHeader>
           <DialogTitle>New routine</DialogTitle>
           <DialogDescription>
@@ -145,6 +165,7 @@ export function CreateTemplateDialog({
             key="create-template"
             onClose={() => onOpenChange(false)}
             onCreated={onCreated}
+            onBusyChange={setBusy}
           />
         )}
       </DialogContent>

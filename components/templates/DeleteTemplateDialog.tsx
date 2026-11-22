@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation } from "convex/react";
-import { useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
@@ -25,20 +25,29 @@ interface DeleteTemplateDialogProps {
   readonly template: DeleteTemplateTarget | null;
   readonly onOpenChange: (open: boolean) => void;
   readonly onDeleted?: () => void;
+  readonly onDeletingChange?: (deleting: boolean) => void;
 }
 
 function DeleteTemplateBody({
   template,
   onClose,
   onDeleted,
+  onBusyChange,
 }: {
   readonly template: DeleteTemplateTarget;
   readonly onClose: () => void;
   readonly onDeleted?: () => void;
+  readonly onBusyChange: (busy: boolean) => void;
 }) {
   const removeTemplate = useMutation(api.templates.remove);
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    return () => {
+      onBusyChange(false);
+    };
+  }, [onBusyChange]);
 
   async function handleDelete() {
     if (deleting) {
@@ -46,9 +55,11 @@ function DeleteTemplateBody({
     }
 
     setDeleting(true);
+    onBusyChange(true);
     setError(null);
     try {
       await removeTemplate({ templateId: template._id });
+      onBusyChange(false);
       onDeleted?.();
       onClose();
     } catch (err) {
@@ -59,6 +70,7 @@ function DeleteTemplateBody({
         ),
       );
       setDeleting(false);
+      onBusyChange(false);
     }
   }
 
@@ -104,17 +116,30 @@ export function DeleteTemplateDialog({
   template,
   onOpenChange,
   onDeleted,
+  onDeletingChange,
 }: DeleteTemplateDialogProps) {
+  const [busy, setBusy] = useState(false);
+  const onDeletingChangeRef = useRef(onDeletingChange);
+
+  useEffect(() => {
+    onDeletingChangeRef.current = onDeletingChange;
+  }, [onDeletingChange]);
+
+  const handleBusyChange = useCallback((nextBusy: boolean) => {
+    setBusy(nextBusy);
+    onDeletingChangeRef.current?.(nextBusy);
+  }, []);
+
   return (
     <Dialog
       open={template !== null}
       onOpenChange={(nextOpen) => {
-        if (!nextOpen) {
+        if (!nextOpen && !busy) {
           onOpenChange(false);
         }
       }}
     >
-      <DialogContent>
+      <DialogContent closeDisabled={busy}>
         <DialogHeader>
           <DialogTitle>Delete routine</DialogTitle>
           <DialogDescription>{template?.title}</DialogDescription>
@@ -126,6 +151,7 @@ export function DeleteTemplateDialog({
             template={template}
             onClose={() => onOpenChange(false)}
             onDeleted={onDeleted}
+            onBusyChange={handleBusyChange}
           />
         )}
       </DialogContent>

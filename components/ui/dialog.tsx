@@ -49,9 +49,14 @@ function DialogContent({
   className,
   children,
   showCloseButton = true,
+  closeDisabled = false,
+  onEscapeKeyDown,
+  onPointerDownOutside,
+  onInteractOutside,
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Content> & {
   showCloseButton?: boolean;
+  closeDisabled?: boolean;
 }) {
   return (
     <DialogPortal>
@@ -62,13 +67,35 @@ function DialogContent({
           "fixed top-1/2 left-1/2 z-50 grid max-h-[90vh] w-[calc(100%-2rem)] max-w-lg -translate-x-1/2 -translate-y-1/2 gap-4 overflow-y-auto rounded-2xl border border-border bg-card p-5 text-card-foreground shadow-lg outline-none duration-200 sm:p-6 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95",
           className,
         )}
+        onEscapeKeyDown={(event) => {
+          if (closeDisabled) {
+            event.preventDefault();
+            return;
+          }
+          onEscapeKeyDown?.(event);
+        }}
+        onPointerDownOutside={(event) => {
+          if (closeDisabled) {
+            event.preventDefault();
+            return;
+          }
+          onPointerDownOutside?.(event);
+        }}
+        onInteractOutside={(event) => {
+          if (closeDisabled) {
+            event.preventDefault();
+            return;
+          }
+          onInteractOutside?.(event);
+        }}
         {...props}
       >
         {children}
         {showCloseButton && (
           <DialogPrimitive.Close
             data-slot="dialog-close"
-            className="absolute top-3 right-3 inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 disabled:pointer-events-none"
+            disabled={closeDisabled}
+            className="absolute top-3 right-3 inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 disabled:pointer-events-none disabled:opacity-50"
           >
             <X className="size-4" aria-hidden="true" />
             <span className="sr-only">Close</span>

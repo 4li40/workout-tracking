@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation } from "convex/react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
@@ -24,13 +24,21 @@ interface DeleteExerciseDialogProps {
 function DeleteExerciseBody({
   exercise,
   onClose,
+  onBusyChange,
 }: {
   readonly exercise: ExerciseListItem;
   readonly onClose: () => void;
+  readonly onBusyChange: (busy: boolean) => void;
 }) {
   const removeExercise = useMutation(api.exercises.remove);
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    return () => {
+      onBusyChange(false);
+    };
+  }, [onBusyChange]);
 
   async function handleDelete() {
     if (deleting) {
@@ -38,9 +46,11 @@ function DeleteExerciseBody({
     }
 
     setDeleting(true);
+    onBusyChange(true);
     setError(null);
     try {
       await removeExercise({ exerciseId: exercise._id });
+      onBusyChange(false);
       onClose();
     } catch (err) {
       setError(
@@ -50,6 +60,7 @@ function DeleteExerciseBody({
         ),
       );
       setDeleting(false);
+      onBusyChange(false);
     }
   }
 
@@ -96,16 +107,18 @@ export function DeleteExerciseDialog({
   exercise,
   onOpenChange,
 }: DeleteExerciseDialogProps) {
+  const [busy, setBusy] = useState(false);
+
   return (
     <Dialog
       open={exercise !== null}
       onOpenChange={(nextOpen) => {
-        if (!nextOpen) {
+        if (!nextOpen && !busy) {
           onOpenChange(false);
         }
       }}
     >
-      <DialogContent>
+      <DialogContent closeDisabled={busy}>
         <DialogHeader>
           <DialogTitle>Delete custom exercise</DialogTitle>
           <DialogDescription>{exercise?.name}</DialogDescription>
@@ -116,6 +129,7 @@ export function DeleteExerciseDialog({
             key={exercise._id}
             exercise={exercise}
             onClose={() => onOpenChange(false)}
+            onBusyChange={setBusy}
           />
         )}
       </DialogContent>

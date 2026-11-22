@@ -2,8 +2,31 @@ import { ConvexError, v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import { mutation, query } from "./_generated/server";
 import { requireAuthUserId, requireOwnedById } from "./lib/auth";
-import { MAX_TEMPLATE_EXERCISES, parseTemplateTitle } from "./lib/templates";
+import { MAX_TEMPLATE_EXERCISES } from "./lib/templates";
 import { equipmentValidator, muscleGroupValidator } from "./lib/validators";
+
+const MAX_WORKOUT_TITLE_LENGTH = 80;
+
+type ParseWorkoutTitleResult =
+  | { readonly kind: "ok"; readonly title: string }
+  | { readonly kind: "error"; readonly message: string };
+
+function parseWorkoutTitle(raw: string): ParseWorkoutTitleResult {
+  const trimmed = raw.trim();
+  if (trimmed.length === 0) {
+    return {
+      kind: "error",
+      message: "Workout title is required.",
+    };
+  }
+  if (trimmed.length > MAX_WORKOUT_TITLE_LENGTH) {
+    return {
+      kind: "error",
+      message: `Workout title must be ${MAX_WORKOUT_TITLE_LENGTH} characters or fewer.`,
+    };
+  }
+  return { kind: "ok", title: trimmed };
+}
 
 const activeWorkoutExerciseValidator = v.object({
   _id: v.id("workoutExercises"),
@@ -120,7 +143,7 @@ export const startWorkout = mutation({
 
     let workoutTitle = "Freestyle Workout";
     if (args.title !== undefined) {
-      const parsedTitle = parseTemplateTitle(args.title);
+      const parsedTitle = parseWorkoutTitle(args.title);
       if (parsedTitle.kind === "error") {
         throw new ConvexError({
           code: "INVALID_ARGUMENT",

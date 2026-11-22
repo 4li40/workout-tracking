@@ -65,11 +65,9 @@ export default function ExercisesPage() {
     null,
   );
 
-  const hasActiveFilters =
-    search.trim().length > 0 ||
-    scope !== "all" ||
-    muscleGroup !== "all" ||
-    equipment !== "all";
+  const hasSecondaryFilters =
+    search.trim().length > 0 || muscleGroup !== "all" || equipment !== "all";
+  const hasActiveFilters = scope !== "all" || hasSecondaryFilters;
 
   const filteredExercises = useMemo(() => {
     if (exercises === undefined) {
@@ -282,12 +280,12 @@ export default function ExercisesPage() {
             </div>
             <div className="space-y-1">
               <h2 className="text-base font-semibold text-foreground">
-                {scope === "custom" && !hasActiveFilters
+                {scope === "custom" && !hasSecondaryFilters
                   ? "No custom exercises yet"
                   : "No matching exercises"}
               </h2>
               <p className="text-sm text-muted-foreground">
-                {scope === "custom" && !hasActiveFilters
+                {scope === "custom" && !hasSecondaryFilters
                   ? "Create a weighted or bodyweight custom movement to use across your routines."
                   : "Try clearing one of your filters or create a custom exercise."}
               </p>

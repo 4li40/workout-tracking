@@ -2,7 +2,7 @@
 
 import { useMutation } from "convex/react";
 import { Lock } from "lucide-react";
-import { type FormEvent, useId, useState } from "react";
+import { type FormEvent, useEffect, useId, useState } from "react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -34,9 +34,11 @@ interface ExerciseNoteDialogProps {
 function ExerciseNoteForm({
   exercise,
   onClose,
+  onBusyChange,
 }: {
   readonly exercise: ExerciseListItem;
   readonly onClose: () => void;
+  readonly onBusyChange: (busy: boolean) => void;
 }) {
   const upsertNote = useMutation(api.exercises.upsertNote);
   const [notes, setNotes] = useState(exercise.notes ?? "");
@@ -48,6 +50,12 @@ function ExerciseNoteForm({
   const hasExistingNote =
     exercise.notes !== undefined && exercise.notes.trim().length > 0;
   const busy = saving || clearing;
+
+  useEffect(() => {
+    return () => {
+      onBusyChange(false);
+    };
+  }, [onBusyChange]);
 
   async function handleSave(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -62,12 +70,14 @@ function ExerciseNoteForm({
     }
 
     setSaving(true);
+    onBusyChange(true);
     setError(null);
     try {
       await upsertNote({
         exerciseId: exercise._id,
         notes: parsed.notes,
       });
+      onBusyChange(false);
       onClose();
     } catch (err) {
       setError(
@@ -77,6 +87,7 @@ function ExerciseNoteForm({
         ),
       );
       setSaving(false);
+      onBusyChange(false);
     }
   }
 
@@ -86,12 +97,14 @@ function ExerciseNoteForm({
     }
 
     setClearing(true);
+    onBusyChange(true);
     setError(null);
     try {
       await upsertNote({
         exerciseId: exercise._id,
         notes: "",
       });
+      onBusyChange(false);
       onClose();
     } catch (err) {
       setError(
@@ -101,6 +114,7 @@ function ExerciseNoteForm({
         ),
       );
       setClearing(false);
+      onBusyChange(false);
     }
   }
 
@@ -202,16 +216,18 @@ export function ExerciseNoteDialog({
   exercise,
   onOpenChange,
 }: ExerciseNoteDialogProps) {
+  const [busy, setBusy] = useState(false);
+
   return (
     <Dialog
       open={exercise !== null}
       onOpenChange={(nextOpen) => {
-        if (!nextOpen) {
+        if (!nextOpen && !busy) {
           onOpenChange(false);
         }
       }}
     >
-      <DialogContent>
+      <DialogContent closeDisabled={busy}>
         <DialogHeader>
           <DialogTitle>Private sticky note</DialogTitle>
           <DialogDescription>{exercise?.name}</DialogDescription>
@@ -222,6 +238,7 @@ export function ExerciseNoteDialog({
             key={exercise._id}
             exercise={exercise}
             onClose={() => onOpenChange(false)}
+            onBusyChange={setBusy}
           />
         )}
       </DialogContent>

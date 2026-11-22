@@ -14,10 +14,6 @@ import {
   parseExerciseNote,
   USER_NOTES_LIST_LIMIT,
 } from "./lib/exercises";
-import {
-  MAX_TEMPLATE_EXERCISES,
-  MAX_TEMPLATES_PER_USER,
-} from "./lib/templates";
 import { equipmentValidator, muscleGroupValidator } from "./lib/validators";
 
 const exerciseListItemValidator = v.object({
@@ -215,44 +211,32 @@ export const remove = mutation({
       });
     }
 
-    const userTemplates = await ctx.db
-      .query("workoutTemplates")
-      .withIndex("by_user_order", (q) => q.eq("userId", userId))
-      .take(MAX_TEMPLATES_PER_USER);
+    const affectedTemplateIds = new Set<Id<"workoutTemplates">>();
+    for await (const row of ctx.db
+      .query("templateExercises")
+      .withIndex("by_user_exercise", (q) =>
+        q.eq("userId", userId).eq("exerciseId", args.exerciseId),
+      )) {
+      affectedTemplateIds.add(row.templateId);
+      await ctx.db.delete("templateExercises", row._id);
+    }
 
-    const templateExerciseGroups = await Promise.all(
-      userTemplates.map((template) =>
-        ctx.db
-          .query("templateExercises")
-          .withIndex("by_template_order", (q) =>
-            q.eq("templateId", template._id),
-          )
-          .take(MAX_TEMPLATE_EXERCISES),
-      ),
-    );
-
-    for (const group of templateExerciseGroups) {
-      const ownedRows = group.filter((row) => row.userId === userId);
-      const removedRows = ownedRows.filter(
-        (row) => row.exerciseId === args.exerciseId,
-      );
-      if (removedRows.length === 0) {
-        continue;
-      }
-
-      for (const row of removedRows) {
-        await ctx.db.delete("templateExercises", row._id);
-      }
-
-      const remainingRows = ownedRows.filter(
-        (row) => row.exerciseId !== args.exerciseId,
-      );
-      for (const [index, row] of remainingRows.entries()) {
+    for (const templateId of affectedTemplateIds) {
+      let index = 0;
+      for await (const row of ctx.db
+        .query("templateExercises")
+        .withIndex("by_template_order", (q) =>
+          q.eq("templateId", templateId),
+        )) {
+        if (row.userId !== userId) {
+          continue;
+        }
         if (row.orderIndex !== index) {
           await ctx.db.patch("templateExercises", row._id, {
             orderIndex: index,
           });
         }
+        index += 1;
       }
     }
 

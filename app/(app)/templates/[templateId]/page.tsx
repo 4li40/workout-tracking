@@ -61,6 +61,7 @@ function TemplateDetailContent({
 
   const [pickerOpen, setPickerOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleteInFlight, setDeleteInFlight] = useState(false);
   const [deletedRedirecting, setDeletedRedirecting] = useState(false);
 
   const [reordering, setReordering] = useState(false);
@@ -84,7 +85,7 @@ function TemplateDetailContent({
     };
   }, []);
 
-  if (deletedRedirecting) {
+  if (deletedRedirecting || (deleteInFlight && template === null)) {
     return (
       <div className="max-w-3xl mx-auto px-4 py-6 sm:px-6 sm:py-8">
         <Card>
@@ -423,9 +424,7 @@ function TemplateDetailContent({
                   const next = event.target.value;
                   setTitleError(null);
                   setTitleSaved(false);
-                  setDraftTitle(
-                    next.trim() === loadedTemplate.title ? null : next,
-                  );
+                  setDraftTitle(next === loadedTemplate.title ? null : next);
                 }}
                 className="text-base font-semibold"
               />
@@ -512,7 +511,7 @@ function TemplateDetailContent({
                 item={item}
                 index={index}
                 totalCount={loadedTemplate.exercises.length}
-                reordering={reordering}
+                listBusy={reordering || removingExerciseId !== null}
                 removing={removingExerciseId === item._id}
                 onMoveUp={() => {
                   void handleReorderExercise(index, index - 1);
@@ -543,6 +542,7 @@ function TemplateDetailContent({
             : null
         }
         onOpenChange={setDeleteOpen}
+        onDeletingChange={setDeleteInFlight}
         onDeleted={() => {
           setDeletedRedirecting(true);
           router.replace("/templates");

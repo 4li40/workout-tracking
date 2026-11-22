@@ -54,6 +54,9 @@ export default function WorkoutsPage() {
   const settings = appShellState?.settings ?? null;
   const activeWorkout = appShellState?.activeWorkout ?? null;
   const launching = launchingTarget !== null;
+  const showActiveConflict =
+    activeConflictTitle !== null &&
+    (appShellState === undefined || activeWorkout !== null);
 
   async function handleStartFreestyle() {
     if (launching) {
@@ -152,8 +155,11 @@ export default function WorkoutsPage() {
       </header>
 
       {activeWorkout !== null && (
-        <Card asChild>
-          <section className="border-primary/25 bg-accent/60 p-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <Card
+          asChild
+          className="border-primary/25 bg-accent/60 p-5 gap-3 sm:flex-row sm:items-center sm:justify-between"
+        >
+          <section>
             <div className="flex items-start gap-3">
               <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground">
                 <Activity className="size-5" aria-hidden="true" />
@@ -175,7 +181,7 @@ export default function WorkoutsPage() {
         </Card>
       )}
 
-      {activeConflictTitle !== null && (
+      {showActiveConflict && (
         <Alert>
           <AlertDescription className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <span>
@@ -189,7 +195,7 @@ export default function WorkoutsPage() {
         </Alert>
       )}
 
-      {launchError !== null && (
+      {launchError !== null && !templatePickerOpen && (
         <Alert variant="destructive">
           <AlertDescription>{launchError}</AlertDescription>
         </Alert>
@@ -443,14 +449,31 @@ export default function WorkoutsPage() {
         )}
       </section>
 
-      <Dialog open={templatePickerOpen} onOpenChange={setTemplatePickerOpen}>
-        <DialogContent>
+      <Dialog
+        open={templatePickerOpen}
+        onOpenChange={(nextOpen) => {
+          if (launching) {
+            return;
+          }
+          setTemplatePickerOpen(nextOpen);
+          if (!nextOpen) {
+            setLaunchError(null);
+          }
+        }}
+      >
+        <DialogContent closeDisabled={launching}>
           <DialogHeader>
             <DialogTitle>Choose a routine</DialogTitle>
             <DialogDescription>
               Pick one of your saved templates to begin training.
             </DialogDescription>
           </DialogHeader>
+
+          {launchError !== null && (
+            <Alert variant="destructive">
+              <AlertDescription>{launchError}</AlertDescription>
+            </Alert>
+          )}
 
           {templates === undefined ? (
             <div className="space-y-2" aria-busy="true">
