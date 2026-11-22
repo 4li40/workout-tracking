@@ -3,6 +3,8 @@
 import { useAuthActions } from "@convex-dev/auth/react";
 import { useRouter } from "next/navigation";
 import { Component, type ReactNode, useEffect, useRef } from "react";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
 import { isUnauthenticatedConvexError } from "@/lib/convexError";
 
 function UnauthenticatedErrorFallback() {
@@ -21,8 +23,8 @@ function UnauthenticatedErrorFallback() {
   }, [signOut, router]);
 
   return (
-    <div className="min-h-screen bg-canvas flex items-center justify-center px-4">
-      <p className="text-sm font-medium text-ink-muted">
+    <div className="min-h-screen bg-background flex items-center justify-center px-4">
+      <p className="text-sm font-medium text-muted-foreground">
         Redirecting to sign in...
       </p>
     </div>
@@ -60,26 +62,27 @@ export class AppShellErrorBoundary extends Component<
       }
 
       return (
-        <div className="min-h-screen bg-canvas flex items-center justify-center px-4">
-          <div className="w-full max-w-md rounded-2xl border border-border bg-surface p-6 shadow-sm space-y-4">
-            <div className="space-y-1">
-              <h1 className="text-lg font-semibold text-ink">
-                Something went wrong
-              </h1>
-              <p className="text-sm text-ink-muted">
-                We could not load this view. Try again to reload your session.
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={() => {
-                this.setState({ error: null });
-              }}
-              className="min-h-11 rounded-xl bg-brand px-4 text-sm font-semibold text-white transition-colors hover:bg-brand-hover cursor-pointer"
-            >
-              Try again
-            </button>
-          </div>
+        <div className="min-h-screen bg-background flex items-center justify-center px-4">
+          <Card className="w-full max-w-md shadow-sm">
+            <CardContent className="p-6 space-y-4">
+              <div className="space-y-1">
+                <h1 className="text-lg font-semibold text-foreground">
+                  Something went wrong
+                </h1>
+                <p className="text-sm text-muted-foreground">
+                  We could not load this view. Try again to reload your session.
+                </p>
+              </div>
+              <Button
+                type="button"
+                onClick={() => {
+                  this.setState({ error: null });
+                }}
+              >
+                Try again
+              </Button>
+            </CardContent>
+          </Card>
         </div>
       );
     }

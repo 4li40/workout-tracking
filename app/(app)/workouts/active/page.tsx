@@ -4,6 +4,10 @@ import { useConvexAuth, useQuery } from "convex/react";
 import { Activity, ArrowLeft, Clock, Dumbbell } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 import { api } from "@/convex/_generated/api";
 import { formatElapsedDuration } from "@/convex/lib/settings";
 
@@ -39,85 +43,88 @@ export default function ActiveWorkoutPage() {
   return (
     <div className="max-w-2xl mx-auto px-4 py-6 sm:px-6 sm:py-8 space-y-6">
       <header className="space-y-1">
-        <h1 className="text-2xl font-semibold tracking-tight text-ink">
+        <h1 className="text-2xl font-semibold tracking-tight text-foreground">
           Active Workout
         </h1>
-        <p className="text-sm text-ink-muted">
+        <p className="text-sm text-muted-foreground">
           Track your in-progress training session.
         </p>
       </header>
 
       {appShellState === undefined ? (
-        <div
-          className="bg-surface border border-border rounded-2xl p-6 shadow-xs space-y-4 animate-pulse"
-          aria-busy="true"
-          aria-label="Loading active workout"
-        >
-          <div className="h-6 w-28 rounded-full bg-surface-subtle" />
-          <div className="h-7 w-48 rounded-md bg-surface-subtle" />
-          <div className="h-5 w-32 rounded-md bg-surface-subtle" />
-          <div className="h-11 w-40 rounded-xl bg-surface-subtle" />
-        </div>
+        <Card aria-busy="true" aria-label="Loading active workout">
+          <CardContent className="p-6 space-y-4">
+            <Skeleton className="h-6 w-28 rounded-full" />
+            <Skeleton className="h-7 w-48" />
+            <Skeleton className="h-5 w-32" />
+            <Skeleton className="h-11 w-40 rounded-xl" />
+          </CardContent>
+        </Card>
       ) : activeWorkout !== null ? (
-        <section className="bg-surface border border-border rounded-2xl p-5 sm:p-6 shadow-xs space-y-5">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-success-tint px-3 py-1 text-xs font-semibold text-success">
-              <Activity className="h-3.5 w-3.5" aria-hidden="true" />
-              In progress
-            </span>
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-brand-tint px-3 py-1 text-sm font-semibold text-brand tabular-nums">
-              <Clock className="h-4 w-4" aria-hidden="true" />
-              <ElapsedWorkoutTimer
-                key={activeWorkout._id}
-                startedAt={activeWorkout.startedAt}
-              />
-            </span>
-          </div>
+        <Card asChild>
+          <section className="p-5 sm:p-6 space-y-5">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <Badge variant="success" className="gap-1.5 px-3 py-1">
+                <Activity className="size-3.5" aria-hidden="true" />
+                In progress
+              </Badge>
+              <Badge
+                variant="accent"
+                className="gap-1.5 px-3 py-1 text-sm tabular-nums"
+              >
+                <Clock className="size-4" aria-hidden="true" />
+                <ElapsedWorkoutTimer
+                  key={activeWorkout._id}
+                  startedAt={activeWorkout.startedAt}
+                />
+              </Badge>
+            </div>
 
-          <div className="space-y-1.5">
-            <h2 className="text-xl font-semibold text-ink">
-              {activeWorkout.title}
-            </h2>
-            <p className="text-sm text-ink-muted">
-              Your session is active and synced. The interactive set logger,
-              inline previous numbers, and live rest timer arrive in MVP 4.
-            </p>
-          </div>
+            <div className="space-y-1.5">
+              <h2 className="text-xl font-semibold text-foreground">
+                {activeWorkout.title}
+              </h2>
+              <p className="text-sm text-muted-foreground">
+                Your session is active and synced. The interactive set logger,
+                inline previous numbers, and live rest timer arrive in MVP 4.
+              </p>
+            </div>
 
-          <div className="border-t border-border pt-4">
-            <Link
-              href="/workouts"
-              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-border bg-surface-subtle px-4 py-2 text-sm font-semibold text-ink transition-colors hover:border-brand/40 hover:bg-brand-tint hover:text-brand focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
-            >
-              <ArrowLeft className="h-4 w-4" aria-hidden="true" />
-              <span>Back to Workouts</span>
-            </Link>
-          </div>
-        </section>
+            <div className="border-t border-border pt-4">
+              <Button asChild variant="secondary">
+                <Link href="/workouts">
+                  <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+                  <span>Back to Workouts</span>
+                </Link>
+              </Button>
+            </div>
+          </section>
+        </Card>
       ) : (
-        <section className="bg-surface border border-border rounded-2xl p-6 sm:p-8 shadow-xs space-y-4">
-          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-brand-tint text-brand">
-            <Dumbbell className="h-5 w-5" aria-hidden="true" />
-          </div>
-          <div className="space-y-1">
-            <h2 className="text-base font-semibold text-ink">
-              No active workout
-            </h2>
-            <p className="text-sm text-ink-muted">
-              You do not have an in-progress session right now. Head back to
-              Workouts to view your saved routines.
-            </p>
-          </div>
-          <div>
-            <Link
-              href="/workouts"
-              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-brand px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-brand-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
-            >
-              <ArrowLeft className="h-4 w-4" aria-hidden="true" />
-              <span>Back to Workouts</span>
-            </Link>
-          </div>
-        </section>
+        <Card asChild>
+          <section className="p-6 sm:p-8 space-y-4">
+            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-accent text-primary">
+              <Dumbbell className="h-5 w-5" aria-hidden="true" />
+            </div>
+            <div className="space-y-1">
+              <h2 className="text-base font-semibold text-foreground">
+                No active workout
+              </h2>
+              <p className="text-sm text-muted-foreground">
+                You do not have an in-progress session right now. Head back to
+                Workouts to view your saved routines.
+              </p>
+            </div>
+            <div>
+              <Button asChild>
+                <Link href="/workouts">
+                  <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+                  <span>Back to Workouts</span>
+                </Link>
+              </Button>
+            </div>
+          </section>
+        </Card>
       )}
     </div>
   );

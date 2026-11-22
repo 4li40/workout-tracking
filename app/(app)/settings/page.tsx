@@ -4,6 +4,13 @@ import { useConvexAuth, useMutation, useQuery } from "convex/react";
 import { Check, LogOut, Minus, Plus, Scale, Timer } from "lucide-react";
 import { type FormEvent, useEffect, useRef, useState } from "react";
 import { useAppShellSignOut } from "@/components/shell/AppShellSignOutContext";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Skeleton } from "@/components/ui/skeleton";
 import { api } from "@/convex/_generated/api";
 import {
   DEFAULT_REST_SECONDS,
@@ -206,10 +213,10 @@ export default function SettingsPage() {
   return (
     <div className="max-w-2xl mx-auto px-4 py-6 sm:px-6 sm:py-8 space-y-6">
       <header className="space-y-1">
-        <h1 className="text-2xl font-semibold tracking-tight text-ink">
+        <h1 className="text-2xl font-semibold tracking-tight text-foreground">
           Settings
         </h1>
-        <p className="text-sm text-ink-muted">
+        <p className="text-sm text-muted-foreground">
           Configure your weight units, default rest timer, and account session.
         </p>
       </header>
@@ -220,280 +227,282 @@ export default function SettingsPage() {
           aria-busy="true"
           aria-label="Loading settings"
         >
-          <div className="bg-surface border border-border rounded-2xl p-5 sm:p-6 shadow-xs space-y-4 animate-pulse">
-            <div className="h-5 w-32 rounded-md bg-surface-subtle" />
-            <div className="h-12 w-full rounded-xl bg-surface-subtle" />
-            <div className="h-4 w-3/4 rounded-md bg-surface-subtle" />
-          </div>
-          <div className="bg-surface border border-border rounded-2xl p-5 sm:p-6 shadow-xs space-y-4 animate-pulse">
-            <div className="h-5 w-40 rounded-md bg-surface-subtle" />
-            <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
-              {REST_TIMER_PRESETS.map((preset) => (
-                <div
-                  key={preset}
-                  className="h-11 rounded-xl bg-surface-subtle"
-                />
-              ))}
-            </div>
-          </div>
+          <Card>
+            <CardContent className="space-y-4">
+              <Skeleton className="h-5 w-32" />
+              <Skeleton className="h-12 w-full rounded-xl" />
+              <Skeleton className="h-4 w-3/4" />
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="space-y-4">
+              <Skeleton className="h-5 w-40" />
+              <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
+                {REST_TIMER_PRESETS.map((preset) => (
+                  <Skeleton key={preset} className="h-11 rounded-xl" />
+                ))}
+              </div>
+            </CardContent>
+          </Card>
         </div>
       ) : (
         <>
-          <section className="bg-surface border border-border rounded-2xl p-5 sm:p-6 shadow-xs space-y-4">
-            <div className="flex items-start justify-between gap-3">
-              <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand-tint text-brand">
-                  <Scale className="h-5 w-5" aria-hidden="true" />
+          <Card asChild>
+            <section className="p-5 sm:p-6 space-y-4">
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-accent text-primary">
+                    <Scale className="h-5 w-5" aria-hidden="true" />
+                  </div>
+                  <div>
+                    <h2 className="text-base font-semibold text-foreground">
+                      Weight unit
+                    </h2>
+                    <p className="text-sm text-muted-foreground">
+                      Used across workout logging, targets, and progression
+                      charts.
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <h2 className="text-base font-semibold text-ink">
-                    Weight unit
-                  </h2>
-                  <p className="text-sm text-ink-muted">
-                    Used across workout logging, targets, and progression
-                    charts.
-                  </p>
-                </div>
-              </div>
-              {unitSaved && (
-                <span
-                  role="status"
-                  className="inline-flex shrink-0 items-center gap-1 rounded-full bg-success-tint px-2.5 py-1 text-xs font-medium text-success"
-                >
-                  <Check className="h-3.5 w-3.5" aria-hidden="true" />
-                  Saved
-                </span>
-              )}
-            </div>
-
-            <fieldset>
-              <legend className="sr-only">Preferred weight unit</legend>
-              <div className="grid grid-cols-2 gap-1.5 rounded-xl bg-surface-subtle p-1.5">
-                {WEIGHT_UNIT_OPTIONS.map((option) => {
-                  const isSelected = currentUnit === option.value;
-                  const isDisabled = unitSaving || settings === null;
-                  return (
-                    <label
-                      key={option.value}
-                      className={`min-h-12 flex items-center justify-center rounded-lg px-3 py-2 text-sm font-semibold transition-colors has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-brand has-[:focus-visible]:ring-offset-1 ${
-                        isSelected
-                          ? "bg-brand text-white shadow-xs"
-                          : "text-ink-muted hover:text-ink"
-                      } ${
-                        isDisabled
-                          ? "cursor-not-allowed opacity-60"
-                          : "cursor-pointer"
-                      }`}
-                    >
-                      <input
-                        type="radio"
-                        name="settings-weight-unit"
-                        value={option.value}
-                        checked={isSelected}
-                        disabled={isDisabled}
-                        onChange={() => {
-                          void handleSelectUnit(option.value);
-                        }}
-                        className="sr-only"
-                      />
-                      <span>{option.label}</span>
-                    </label>
-                  );
-                })}
-              </div>
-            </fieldset>
-
-            {unitError !== null && (
-              <p
-                role="alert"
-                className="rounded-xl border border-danger/25 bg-danger-tint px-3.5 py-2.5 text-sm font-medium text-danger"
-              >
-                {unitError}
-              </p>
-            )}
-
-            <p className="text-xs leading-relaxed text-ink-muted">
-              Historical workouts convert cleanly whenever you switch because
-              logged weights are stored canonically in kilograms.
-            </p>
-          </section>
-
-          <section className="bg-surface border border-border rounded-2xl p-5 sm:p-6 shadow-xs space-y-5">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand-tint text-brand">
-                  <Timer className="h-5 w-5" aria-hidden="true" />
-                </div>
-                <div>
-                  <h2 className="text-base font-semibold text-ink">
-                    Default rest timer
-                  </h2>
-                  <p className="text-sm text-ink-muted">
-                    Applied automatically to new sets when no custom rest is
-                    set.
-                  </p>
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                {restSaved && (
-                  <span
+                {unitSaved && (
+                  <Badge
                     role="status"
-                    className="inline-flex items-center gap-1 rounded-full bg-success-tint px-2.5 py-1 text-xs font-medium text-success"
+                    variant="success"
+                    className="shrink-0 py-1 font-medium"
                   >
-                    <Check className="h-3.5 w-3.5" aria-hidden="true" />
+                    <Check className="size-3.5" aria-hidden="true" />
                     Saved
-                  </span>
+                  </Badge>
                 )}
-                <span className="inline-flex items-center rounded-full bg-brand-tint px-3 py-1 text-sm font-semibold text-brand tabular-nums">
-                  {formatRestDuration(currentRestSeconds)}
-                </span>
               </div>
-            </div>
 
-            <div className="space-y-2">
-              <p className="text-xs font-medium uppercase tracking-wide text-ink-muted">
-                Quick presets
-              </p>
-              <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
-                {REST_TIMER_PRESETS.map((preset) => {
-                  const isActive =
-                    !hasRestDraftChanges && currentRestSeconds === preset;
-                  return (
-                    <button
-                      key={preset}
-                      type="button"
-                      disabled={restSaving || settings === null}
-                      onClick={() => {
-                        void handleSelectRestPreset(preset);
-                      }}
-                      className={`min-h-11 rounded-xl border px-3 py-2 text-sm font-semibold tabular-nums transition-colors cursor-pointer disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand ${
-                        isActive
-                          ? "border-brand bg-brand text-white shadow-xs"
-                          : "border-border bg-surface-subtle text-ink hover:border-brand/40 hover:bg-brand-tint hover:text-brand"
-                      }`}
-                    >
-                      {formatRestDuration(preset)}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            <form
-              noValidate
-              onSubmit={(event) => {
-                void handleSaveCustomRest(event);
-              }}
-              className="space-y-2.5 border-t border-border pt-4"
-            >
-              <label
-                htmlFor="custom-rest-seconds"
-                className="block text-xs font-medium uppercase tracking-wide text-ink-muted"
-              >
-                Custom duration (seconds)
-              </label>
-              <div className="flex flex-wrap items-center gap-2">
-                <button
-                  type="button"
-                  disabled={restSaving || settings === null}
-                  onClick={() => handleStepRest(-REST_STEP_SECONDS)}
-                  aria-label={`Decrease rest timer by ${REST_STEP_SECONDS} seconds`}
-                  className="inline-flex min-h-11 min-w-11 items-center justify-center gap-1 rounded-xl border border-border bg-surface-subtle px-3 text-sm font-semibold text-ink transition-colors hover:bg-brand-tint hover:text-brand cursor-pointer disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
-                >
-                  <Minus className="h-4 w-4" aria-hidden="true" />
-                  <span>{REST_STEP_SECONDS}s</span>
-                </button>
-
-                <input
-                  id="custom-rest-seconds"
-                  type="number"
-                  inputMode="numeric"
-                  min={MIN_REST_SECONDS}
-                  max={MAX_REST_SECONDS}
-                  step={1}
-                  disabled={restSaving || settings === null}
-                  value={restInputValue}
-                  onChange={(event) => {
-                    const nextValue = event.target.value;
-                    setRestError(null);
-                    setRestSaved(false);
-                    setDraftRestInput(
-                      nextValue.trim() === String(currentRestSeconds)
-                        ? null
-                        : nextValue,
+              <fieldset>
+                <legend className="sr-only">Preferred weight unit</legend>
+                <div className="grid grid-cols-2 gap-1.5 rounded-xl bg-secondary p-1.5">
+                  {WEIGHT_UNIT_OPTIONS.map((option) => {
+                    const isSelected = currentUnit === option.value;
+                    const isDisabled = unitSaving || settings === null;
+                    return (
+                      <label
+                        key={option.value}
+                        className={`min-h-12 flex items-center justify-center rounded-lg px-3 py-2 text-sm font-semibold transition-colors has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring has-[:focus-visible]:ring-offset-1 ${
+                          isSelected
+                            ? "bg-primary text-primary-foreground shadow-xs"
+                            : "text-muted-foreground hover:text-foreground"
+                        } ${
+                          isDisabled
+                            ? "cursor-not-allowed opacity-60"
+                            : "cursor-pointer"
+                        }`}
+                      >
+                        <input
+                          type="radio"
+                          name="settings-weight-unit"
+                          value={option.value}
+                          checked={isSelected}
+                          disabled={isDisabled}
+                          onChange={() => {
+                            void handleSelectUnit(option.value);
+                          }}
+                          className="sr-only"
+                        />
+                        <span>{option.label}</span>
+                      </label>
                     );
-                  }}
-                  className="min-h-11 w-24 flex-1 sm:flex-none rounded-xl border border-border bg-surface-subtle px-3.5 text-center text-base font-semibold text-ink tabular-nums outline-none transition-colors focus:border-brand focus:bg-surface focus:ring-2 focus:ring-brand/20 disabled:opacity-60"
-                />
+                  })}
+                </div>
+              </fieldset>
 
-                <button
-                  type="button"
-                  disabled={restSaving || settings === null}
-                  onClick={() => handleStepRest(REST_STEP_SECONDS)}
-                  aria-label={`Increase rest timer by ${REST_STEP_SECONDS} seconds`}
-                  className="inline-flex min-h-11 min-w-11 items-center justify-center gap-1 rounded-xl border border-border bg-surface-subtle px-3 text-sm font-semibold text-ink transition-colors hover:bg-brand-tint hover:text-brand cursor-pointer disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
-                >
-                  <Plus className="h-4 w-4" aria-hidden="true" />
-                  <span>{REST_STEP_SECONDS}s</span>
-                </button>
+              {unitError !== null && (
+                <Alert variant="destructive">
+                  <AlertDescription>{unitError}</AlertDescription>
+                </Alert>
+              )}
 
-                {hasRestDraftChanges && (
-                  <button
-                    type="submit"
-                    disabled={restSaving || settings === null}
-                    className="min-h-11 rounded-xl bg-brand px-4 text-sm font-semibold text-white transition-colors hover:bg-brand-hover cursor-pointer disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+              <p className="text-xs leading-relaxed text-muted-foreground">
+                Historical workouts convert cleanly whenever you switch because
+                logged weights are stored canonically in kilograms.
+              </p>
+            </section>
+          </Card>
+
+          <Card asChild>
+            <section className="p-5 sm:p-6 space-y-5">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-accent text-primary">
+                    <Timer className="h-5 w-5" aria-hidden="true" />
+                  </div>
+                  <div>
+                    <h2 className="text-base font-semibold text-foreground">
+                      Default rest timer
+                    </h2>
+                    <p className="text-sm text-muted-foreground">
+                      Applied automatically to new sets when no custom rest is
+                      set.
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  {restSaved && (
+                    <Badge
+                      role="status"
+                      variant="success"
+                      className="py-1 font-medium"
+                    >
+                      <Check className="size-3.5" aria-hidden="true" />
+                      Saved
+                    </Badge>
+                  )}
+                  <Badge
+                    variant="accent"
+                    className="px-3 py-1 text-sm font-semibold tabular-nums"
                   >
-                    {restSaving ? "Saving..." : "Save"}
-                  </button>
-                )}
+                    {formatRestDuration(currentRestSeconds)}
+                  </Badge>
+                </div>
               </div>
 
-              <p className="text-xs text-ink-muted">
-                Enter a whole number between {MIN_REST_SECONDS} and{" "}
-                {MAX_REST_SECONDS} seconds.
-              </p>
-
-              {restError !== null && (
-                <p
-                  role="alert"
-                  className="rounded-xl border border-danger/25 bg-danger-tint px-3.5 py-2.5 text-sm font-medium text-danger"
-                >
-                  {restError}
+              <div className="space-y-2">
+                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                  Quick presets
                 </p>
-              )}
-            </form>
-          </section>
+                <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
+                  {REST_TIMER_PRESETS.map((preset) => {
+                    const isActive =
+                      !hasRestDraftChanges && currentRestSeconds === preset;
+                    return (
+                      <Button
+                        key={preset}
+                        type="button"
+                        variant={isActive ? "default" : "secondary"}
+                        disabled={restSaving || settings === null}
+                        onClick={() => {
+                          void handleSelectRestPreset(preset);
+                        }}
+                        className="px-3 tabular-nums"
+                      >
+                        {formatRestDuration(preset)}
+                      </Button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <form
+                noValidate
+                onSubmit={(event) => {
+                  void handleSaveCustomRest(event);
+                }}
+                className="space-y-2.5 border-t border-border pt-4"
+              >
+                <Label
+                  htmlFor="custom-rest-seconds"
+                  className="block text-xs font-medium uppercase tracking-wide text-muted-foreground"
+                >
+                  Custom duration (seconds)
+                </Label>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    disabled={restSaving || settings === null}
+                    onClick={() => handleStepRest(-REST_STEP_SECONDS)}
+                    aria-label={`Decrease rest timer by ${REST_STEP_SECONDS} seconds`}
+                    className="gap-1 px-3"
+                  >
+                    <Minus className="h-4 w-4" aria-hidden="true" />
+                    <span>{REST_STEP_SECONDS}s</span>
+                  </Button>
+
+                  <Input
+                    id="custom-rest-seconds"
+                    type="number"
+                    inputMode="numeric"
+                    min={MIN_REST_SECONDS}
+                    max={MAX_REST_SECONDS}
+                    step={1}
+                    disabled={restSaving || settings === null}
+                    value={restInputValue}
+                    onChange={(event) => {
+                      const nextValue = event.target.value;
+                      setRestError(null);
+                      setRestSaved(false);
+                      setDraftRestInput(
+                        nextValue.trim() === String(currentRestSeconds)
+                          ? null
+                          : nextValue,
+                      );
+                    }}
+                    className="w-24 flex-1 sm:flex-none bg-secondary text-center text-base font-semibold tabular-nums focus-visible:bg-card"
+                  />
+
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    disabled={restSaving || settings === null}
+                    onClick={() => handleStepRest(REST_STEP_SECONDS)}
+                    aria-label={`Increase rest timer by ${REST_STEP_SECONDS} seconds`}
+                    className="gap-1 px-3"
+                  >
+                    <Plus className="h-4 w-4" aria-hidden="true" />
+                    <span>{REST_STEP_SECONDS}s</span>
+                  </Button>
+
+                  {hasRestDraftChanges && (
+                    <Button
+                      type="submit"
+                      disabled={restSaving || settings === null}
+                    >
+                      {restSaving ? "Saving..." : "Save"}
+                    </Button>
+                  )}
+                </div>
+
+                <p className="text-xs text-muted-foreground">
+                  Enter a whole number between {MIN_REST_SECONDS} and{" "}
+                  {MAX_REST_SECONDS} seconds.
+                </p>
+
+                {restError !== null && (
+                  <Alert variant="destructive">
+                    <AlertDescription>{restError}</AlertDescription>
+                  </Alert>
+                )}
+              </form>
+            </section>
+          </Card>
         </>
       )}
 
-      <section className="bg-surface border border-border rounded-2xl p-5 sm:p-6 shadow-xs space-y-4">
-        <div className="space-y-1">
-          <h2 className="text-base font-semibold text-ink">Account</h2>
-          <p className="text-sm text-ink-muted">
-            Sign out of this device. Your workouts, routines, and preferences
-            remain safely synced.
-          </p>
-        </div>
+      <Card asChild>
+        <section className="p-5 sm:p-6 space-y-4">
+          <div className="space-y-1">
+            <h2 className="text-base font-semibold text-foreground">Account</h2>
+            <p className="text-sm text-muted-foreground">
+              Sign out of this device. Your workouts, routines, and preferences
+              remain safely synced.
+            </p>
+          </div>
 
-        <button
-          type="button"
-          disabled={signingOut}
-          onClick={signOut}
-          className="inline-flex min-h-11 w-full sm:w-auto items-center justify-center gap-2 rounded-xl border border-danger/30 bg-danger-tint px-5 py-2.5 text-sm font-semibold text-danger transition-colors hover:bg-danger hover:text-white cursor-pointer disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger"
-        >
-          <LogOut className="h-4 w-4" aria-hidden="true" />
-          <span>{signingOut ? "Signing out..." : "Sign out"}</span>
-        </button>
-
-        {signOutError !== null && (
-          <p
-            role="alert"
-            className="rounded-xl border border-danger/25 bg-danger-tint px-3.5 py-2.5 text-sm font-medium text-danger"
+          <Button
+            type="button"
+            variant="outline"
+            disabled={signingOut}
+            onClick={signOut}
+            className="w-full sm:w-auto border-destructive/30 bg-destructive-tint text-destructive hover:border-destructive hover:bg-destructive hover:text-destructive-foreground focus-visible:ring-destructive/30"
           >
-            {signOutError}
-          </p>
-        )}
-      </section>
+            <LogOut className="h-4 w-4" aria-hidden="true" />
+            <span>{signingOut ? "Signing out..." : "Sign out"}</span>
+          </Button>
+
+          {signOutError !== null && (
+            <Alert variant="destructive">
+              <AlertDescription>{signOutError}</AlertDescription>
+            </Alert>
+          )}
+        </section>
+      </Card>
     </div>
   );
 }

@@ -11,6 +11,11 @@ import { useConvexAuth } from "convex/react";
 import { Dumbbell } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { api } from "@/convex/_generated/api";
 
 export default function SignIn() {
@@ -41,154 +46,144 @@ export default function SignIn() {
   };
 
   return (
-    <main className="min-h-screen bg-canvas px-4 py-10 flex items-center justify-center">
+    <main className="min-h-screen bg-background px-4 py-10 flex items-center justify-center">
       <div className="w-full max-w-md flex flex-col items-center gap-6">
         <div className="flex flex-col items-center text-center gap-3">
-          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-brand text-white shadow-sm">
+          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-sm">
             <Dumbbell className="h-7 w-7" aria-hidden="true" />
           </div>
           <div className="space-y-1">
-            <h1 className="text-2xl font-bold tracking-tight text-ink">
+            <h1 className="text-2xl font-bold tracking-tight text-foreground">
               Workout Tracker
             </h1>
-            <p className="text-sm text-ink-muted">
+            <p className="text-sm text-muted-foreground">
               Track sets, beat last week, and build strength.
             </p>
           </div>
         </div>
 
-        <div className="w-full max-w-md rounded-2xl border border-border bg-surface p-6 sm:p-8 shadow-sm">
-          <div
-            className="grid grid-cols-2 gap-1 rounded-xl bg-surface-subtle p-1"
-            role="group"
-            aria-label="Authentication mode"
-          >
-            <button
-              type="button"
-              aria-pressed={flow === "signIn"}
-              disabled={loading}
-              onClick={() => switchFlow("signIn")}
-              className={`min-h-11 rounded-lg px-3 text-sm font-semibold transition-colors cursor-pointer disabled:cursor-not-allowed ${
-                flow === "signIn"
-                  ? "bg-surface text-ink shadow-xs"
-                  : "text-ink-muted hover:text-ink"
-              }`}
+        <Card className="w-full max-w-md shadow-sm">
+          <CardContent className="p-6 sm:p-8">
+            <div
+              className="grid grid-cols-2 gap-1 rounded-xl bg-secondary p-1"
+              role="group"
+              aria-label="Authentication mode"
             >
-              Sign in
-            </button>
-            <button
-              type="button"
-              aria-pressed={flow === "signUp"}
-              disabled={loading}
-              onClick={() => switchFlow("signUp")}
-              className={`min-h-11 rounded-lg px-3 text-sm font-semibold transition-colors cursor-pointer disabled:cursor-not-allowed ${
-                flow === "signUp"
-                  ? "bg-surface text-ink shadow-xs"
-                  : "text-ink-muted hover:text-ink"
-              }`}
-            >
-              Sign up
-            </button>
-          </div>
-
-          <form
-            className="mt-6 flex flex-col gap-4"
-            onSubmit={(e) => {
-              e.preventDefault();
-              if (loading) {
-                return;
-              }
-              setError(null);
-              void (flow === "signIn" ? signIn : signUp)({
-                username,
-                password,
-              }).then((result) => {
-                if (result.status === "complete") {
-                  setRedirecting(true);
-                  router.replace("/workouts");
-                } else {
-                  setError(errorMessage(result.userError));
-                }
-              });
-            }}
-          >
-            <div className="flex flex-col gap-1.5">
-              <label
-                htmlFor="username"
-                className="text-sm font-medium text-ink"
-              >
-                Username
-              </label>
-              <input
-                className="min-h-11 w-full rounded-xl border border-border bg-surface px-3.5 text-sm text-ink placeholder:text-ink-muted outline-none transition-colors focus:border-brand focus:ring-2 focus:ring-brand/20 disabled:opacity-60"
-                id="username"
-                name="username"
-                type="text"
-                placeholder="Enter your username"
-                autoComplete="username"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                required
+              <Button
+                type="button"
+                variant="ghost"
+                aria-pressed={flow === "signIn"}
                 disabled={loading}
-              />
+                onClick={() => switchFlow("signIn")}
+                className={
+                  flow === "signIn"
+                    ? "rounded-lg bg-card px-3 text-foreground shadow-xs hover:bg-card hover:text-foreground"
+                    : "rounded-lg px-3 text-muted-foreground hover:bg-transparent hover:text-foreground"
+                }
+              >
+                Sign in
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                aria-pressed={flow === "signUp"}
+                disabled={loading}
+                onClick={() => switchFlow("signUp")}
+                className={
+                  flow === "signUp"
+                    ? "rounded-lg bg-card px-3 text-foreground shadow-xs hover:bg-card hover:text-foreground"
+                    : "rounded-lg px-3 text-muted-foreground hover:bg-transparent hover:text-foreground"
+                }
+              >
+                Sign up
+              </Button>
             </div>
 
-            <div className="flex flex-col gap-1.5">
-              <label
-                htmlFor="password"
-                className="text-sm font-medium text-ink"
-              >
-                Password
-              </label>
-              <input
-                className="min-h-11 w-full rounded-xl border border-border bg-surface px-3.5 text-sm text-ink placeholder:text-ink-muted outline-none transition-colors focus:border-brand focus:ring-2 focus:ring-brand/20 disabled:opacity-60"
-                id="password"
-                name="password"
-                type="password"
-                placeholder="Enter your password"
-                autoComplete={
-                  flow === "signIn" ? "current-password" : "new-password"
+            <form
+              className="mt-6 flex flex-col gap-4"
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (loading) {
+                  return;
                 }
-                minLength={
-                  flow === "signUp" ? DEFAULT_MIN_PASSWORD_LENGTH : undefined
-                }
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                disabled={loading}
-              />
-              {flow === "signUp" && (
-                <p className="text-xs text-ink-muted">
-                  Password must be at least {DEFAULT_MIN_PASSWORD_LENGTH}{" "}
-                  characters.
-                </p>
-              )}
-            </div>
-
-            {error && (
-              <div
-                role="alert"
-                className="rounded-xl border border-danger/25 bg-danger-tint px-4 py-3 text-sm font-medium text-danger break-words"
-              >
-                {error}
+                setError(null);
+                void (flow === "signIn" ? signIn : signUp)({
+                  username,
+                  password,
+                }).then((result) => {
+                  if (result.status === "complete") {
+                    setRedirecting(true);
+                    router.replace("/workouts");
+                  } else {
+                    setError(errorMessage(result.userError));
+                  }
+                });
+              }}
+            >
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="username">Username</Label>
+                <Input
+                  id="username"
+                  name="username"
+                  type="text"
+                  placeholder="Enter your username"
+                  autoComplete="username"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  required
+                  disabled={loading}
+                />
               </div>
-            )}
 
-            <button
-              className="mt-1 min-h-12 w-full rounded-xl bg-brand px-4 text-sm font-semibold text-white transition-colors hover:bg-brand-hover cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-              type="submit"
-              disabled={loading}
-            >
-              {loading
-                ? flow === "signIn"
-                  ? "Signing in..."
-                  : "Creating account..."
-                : flow === "signIn"
-                  ? "Sign in"
-                  : "Create account"}
-            </button>
-          </form>
-        </div>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="password">Password</Label>
+                <Input
+                  id="password"
+                  name="password"
+                  type="password"
+                  placeholder="Enter your password"
+                  autoComplete={
+                    flow === "signIn" ? "current-password" : "new-password"
+                  }
+                  minLength={
+                    flow === "signUp" ? DEFAULT_MIN_PASSWORD_LENGTH : undefined
+                  }
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                  disabled={loading}
+                />
+                {flow === "signUp" && (
+                  <p className="text-xs text-muted-foreground">
+                    Password must be at least {DEFAULT_MIN_PASSWORD_LENGTH}{" "}
+                    characters.
+                  </p>
+                )}
+              </div>
+
+              {error && (
+                <Alert variant="destructive">
+                  <AlertDescription>{error}</AlertDescription>
+                </Alert>
+              )}
+
+              <Button
+                className="mt-1 w-full"
+                size="lg"
+                type="submit"
+                disabled={loading}
+              >
+                {loading
+                  ? flow === "signIn"
+                    ? "Signing in..."
+                    : "Creating account..."
+                  : flow === "signIn"
+                    ? "Sign in"
+                    : "Create account"}
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
       </div>
     </main>
   );
