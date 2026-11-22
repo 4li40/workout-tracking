@@ -7,10 +7,10 @@ import {
   useSignInWithUsernamePassword,
   useSignUpWithUsernamePassword,
 } from "@convex-dev/auth/methods/username-password/react";
-import { api } from "@/convex/_generated/api";
+import { Dumbbell } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import Image from "next/image";
+import { api } from "@/convex/_generated/api";
 
 export default function SignIn() {
   const { signIn, pending: signInPending } = useSignInWithUsernamePassword(
@@ -26,121 +26,160 @@ export default function SignIn() {
   const [redirecting, setRedirecting] = useState(false);
   const loading = signInPending || signUpPending || redirecting;
   const router = useRouter();
+
+  const switchFlow = (nextFlow: "signIn" | "signUp") => {
+    setFlow(nextFlow);
+    setError(null);
+  };
+
   return (
-    <div className="flex flex-col gap-8 w-full max-w-lg mx-auto h-screen justify-center items-center px-4">
-      <div className="text-center flex flex-col items-center gap-4">
-        <div className="flex items-center gap-6">
-          <Image src="/convex.svg" alt="Convex Logo" width={90} height={90} />
-          <div className="w-px h-20 bg-slate-300 dark:bg-slate-600"></div>
-          <Image
-            src="/nextjs-icon-light-background.svg"
-            alt="Next.js Logo"
-            width={90}
-            height={90}
-            className="dark:hidden"
-          />
-          <Image
-            src="/nextjs-icon-dark-background.svg"
-            alt="Next.js Logo"
-            width={90}
-            height={90}
-            className="hidden dark:block"
-          />
-        </div>
-        <h1 className="text-3xl font-bold text-slate-800 dark:text-slate-200">
-          Convex + Next.js + Convex Auth
-        </h1>
-        <p className="text-slate-600 dark:text-slate-400">
-          This demo uses Convex Auth for authentication, so you will need to
-          sign in or sign up to access the demo.
-        </p>
-      </div>
-      <form
-        className="flex flex-col gap-4 w-full bg-slate-100 dark:bg-slate-800 p-8 rounded-2xl shadow-xl border border-slate-300 dark:border-slate-600"
-        onSubmit={(e) => {
-          e.preventDefault();
-          setError(null);
-          void (flow === "signIn" ? signIn : signUp)({
-            username,
-            password,
-          }).then((result) => {
-            if (result.status === "complete") {
-              setRedirecting(true);
-              router.push("/");
-            } else {
-              setError(errorMessage(result.userError));
-            }
-          });
-        }}
-      >
-        <input
-          className="bg-white dark:bg-slate-900 text-foreground rounded-lg p-3 border border-slate-300 dark:border-slate-600 focus:border-slate-500 dark:focus:border-slate-400 focus:ring-2 focus:ring-slate-200 dark:focus:ring-slate-700 outline-none transition-all placeholder:text-slate-400"
-          id="username"
-          name="username"
-          type="text"
-          placeholder="Username"
-          autoComplete="username"
-          value={username}
-          onChange={(e) => setUsername(e.target.value)}
-          required
-          disabled={loading}
-        />
-        <div className="flex flex-col gap-1">
-          <input
-            className="bg-white dark:bg-slate-900 text-foreground rounded-lg p-3 border border-slate-300 dark:border-slate-600 focus:border-slate-500 dark:focus:border-slate-400 focus:ring-2 focus:ring-slate-200 dark:focus:ring-slate-700 outline-none transition-all placeholder:text-slate-400"
-            id="password"
-            name="password"
-            type="password"
-            placeholder="Password"
-            autoComplete={
-              flow === "signIn" ? "current-password" : "new-password"
-            }
-            minLength={
-              flow === "signUp" ? DEFAULT_MIN_PASSWORD_LENGTH : undefined
-            }
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-            disabled={loading}
-          />
-          {flow === "signUp" && (
-            <p className="text-xs text-slate-500 dark:text-slate-400 px-1">
-              Password must be at least {DEFAULT_MIN_PASSWORD_LENGTH} characters
-            </p>
-          )}
-        </div>
-        <button
-          className="bg-slate-700 hover:bg-slate-800 dark:bg-slate-600 dark:hover:bg-slate-500 text-white font-semibold rounded-lg py-3 shadow-md hover:shadow-lg transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
-          type="submit"
-          disabled={loading}
-        >
-          {loading ? "Loading..." : flow === "signIn" ? "Sign in" : "Sign up"}
-        </button>
-        <div className="flex flex-row gap-2 text-sm justify-center">
-          <span className="text-slate-600 dark:text-slate-400">
-            {flow === "signIn"
-              ? "Don't have an account?"
-              : "Already have an account?"}
-          </span>
-          <span
-            className="text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-slate-100 font-medium underline decoration-2 underline-offset-2 hover:no-underline cursor-pointer transition-colors"
-            onClick={() => {
-              setFlow(flow === "signIn" ? "signUp" : "signIn");
-              setError(null);
-            }}
-          >
-            {flow === "signIn" ? "Sign up" : "Sign in"}
-          </span>
-        </div>
-        {error && (
-          <div className="bg-rose-500/10 border border-rose-500/30 dark:border-rose-500/50 rounded-lg p-4">
-            <p className="text-rose-700 dark:text-rose-300 font-medium text-sm break-words">
-              {error}
+    <main className="min-h-screen bg-canvas px-4 py-10 flex items-center justify-center">
+      <div className="w-full max-w-md flex flex-col items-center gap-6">
+        <div className="flex flex-col items-center text-center gap-3">
+          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-brand text-white shadow-sm">
+            <Dumbbell className="h-7 w-7" aria-hidden="true" />
+          </div>
+          <div className="space-y-1">
+            <h1 className="text-2xl font-bold tracking-tight text-ink">
+              Workout Tracker
+            </h1>
+            <p className="text-sm text-ink-muted">
+              Track sets, beat last week, and build strength.
             </p>
           </div>
-        )}
-      </form>
-    </div>
+        </div>
+
+        <div className="w-full max-w-md rounded-2xl border border-border bg-surface p-6 sm:p-8 shadow-sm">
+          <div
+            className="grid grid-cols-2 gap-1 rounded-xl bg-surface-subtle p-1"
+            role="group"
+            aria-label="Authentication mode"
+          >
+            <button
+              type="button"
+              aria-pressed={flow === "signIn"}
+              disabled={loading}
+              onClick={() => switchFlow("signIn")}
+              className={`min-h-11 rounded-lg px-3 text-sm font-semibold transition-colors cursor-pointer disabled:cursor-not-allowed ${
+                flow === "signIn"
+                  ? "bg-surface text-ink shadow-xs"
+                  : "text-ink-muted hover:text-ink"
+              }`}
+            >
+              Sign in
+            </button>
+            <button
+              type="button"
+              aria-pressed={flow === "signUp"}
+              disabled={loading}
+              onClick={() => switchFlow("signUp")}
+              className={`min-h-11 rounded-lg px-3 text-sm font-semibold transition-colors cursor-pointer disabled:cursor-not-allowed ${
+                flow === "signUp"
+                  ? "bg-surface text-ink shadow-xs"
+                  : "text-ink-muted hover:text-ink"
+              }`}
+            >
+              Sign up
+            </button>
+          </div>
+
+          <form
+            className="mt-6 flex flex-col gap-4"
+            onSubmit={(e) => {
+              e.preventDefault();
+              setError(null);
+              void (flow === "signIn" ? signIn : signUp)({
+                username,
+                password,
+              }).then((result) => {
+                if (result.status === "complete") {
+                  setRedirecting(true);
+                  router.push("/workouts");
+                } else {
+                  setError(errorMessage(result.userError));
+                }
+              });
+            }}
+          >
+            <div className="flex flex-col gap-1.5">
+              <label
+                htmlFor="username"
+                className="text-sm font-medium text-ink"
+              >
+                Username
+              </label>
+              <input
+                className="min-h-11 w-full rounded-xl border border-border bg-surface px-3.5 text-sm text-ink placeholder:text-ink-muted outline-none transition-colors focus:border-brand focus:ring-2 focus:ring-brand/20 disabled:opacity-60"
+                id="username"
+                name="username"
+                type="text"
+                placeholder="Enter your username"
+                autoComplete="username"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                required
+                disabled={loading}
+              />
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <label
+                htmlFor="password"
+                className="text-sm font-medium text-ink"
+              >
+                Password
+              </label>
+              <input
+                className="min-h-11 w-full rounded-xl border border-border bg-surface px-3.5 text-sm text-ink placeholder:text-ink-muted outline-none transition-colors focus:border-brand focus:ring-2 focus:ring-brand/20 disabled:opacity-60"
+                id="password"
+                name="password"
+                type="password"
+                placeholder="Enter your password"
+                autoComplete={
+                  flow === "signIn" ? "current-password" : "new-password"
+                }
+                minLength={
+                  flow === "signUp" ? DEFAULT_MIN_PASSWORD_LENGTH : undefined
+                }
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                disabled={loading}
+              />
+              {flow === "signUp" && (
+                <p className="text-xs text-ink-muted">
+                  Password must be at least {DEFAULT_MIN_PASSWORD_LENGTH}{" "}
+                  characters.
+                </p>
+              )}
+            </div>
+
+            {error && (
+              <div
+                role="alert"
+                className="rounded-xl border border-danger/25 bg-danger-tint px-4 py-3 text-sm font-medium text-danger break-words"
+              >
+                {error}
+              </div>
+            )}
+
+            <button
+              className="mt-1 min-h-12 w-full rounded-xl bg-brand px-4 text-sm font-semibold text-white transition-colors hover:bg-brand-hover cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+              type="submit"
+              disabled={loading}
+            >
+              {loading
+                ? flow === "signIn"
+                  ? "Signing in..."
+                  : "Creating account..."
+                : flow === "signIn"
+                  ? "Sign in"
+                  : "Create account"}
+            </button>
+          </form>
+        </div>
+      </div>
+    </main>
   );
 }
 
