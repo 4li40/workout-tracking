@@ -7,22 +7,14 @@ import { useEffect, useState } from "react";
 import { api } from "@/convex/_generated/api";
 import { formatElapsedDuration } from "@/convex/lib/settings";
 
-export default function ActiveWorkoutPage() {
-  const { isAuthenticated } = useConvexAuth();
-  const appShellState = useQuery(
-    api.userSettings.getAppShellState,
-    isAuthenticated ? {} : "skip",
-  );
+function ElapsedWorkoutTimer({
+  startedAt,
+}: Readonly<{
+  startedAt: number;
+}>) {
   const [nowMs, setNowMs] = useState(() => Date.now());
 
-  const activeWorkout = appShellState?.activeWorkout ?? null;
-  const hasActiveWorkout = activeWorkout !== null;
-
   useEffect(() => {
-    if (!hasActiveWorkout) {
-      return;
-    }
-
     const intervalId = setInterval(() => {
       setNowMs(Date.now());
     }, 1000);
@@ -30,7 +22,19 @@ export default function ActiveWorkoutPage() {
     return () => {
       clearInterval(intervalId);
     };
-  }, [hasActiveWorkout]);
+  }, []);
+
+  return <>{formatElapsedDuration(nowMs - startedAt)}</>;
+}
+
+export default function ActiveWorkoutPage() {
+  const { isAuthenticated } = useConvexAuth();
+  const appShellState = useQuery(
+    api.userSettings.getAppShellState,
+    isAuthenticated ? {} : "skip",
+  );
+
+  const activeWorkout = appShellState?.activeWorkout ?? null;
 
   return (
     <div className="max-w-2xl mx-auto px-4 py-6 sm:px-6 sm:py-8 space-y-6">
@@ -63,7 +67,10 @@ export default function ActiveWorkoutPage() {
             </span>
             <span className="inline-flex items-center gap-1.5 rounded-full bg-brand-tint px-3 py-1 text-sm font-semibold text-brand tabular-nums">
               <Clock className="h-4 w-4" aria-hidden="true" />
-              {formatElapsedDuration(nowMs - activeWorkout.startedAt)}
+              <ElapsedWorkoutTimer
+                key={activeWorkout._id}
+                startedAt={activeWorkout.startedAt}
+              />
             </span>
           </div>
 

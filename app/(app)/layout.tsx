@@ -1,10 +1,15 @@
 import type { ReactNode } from "react";
 import { AppShell } from "@/components/shell/AppShell";
+import { AppShellErrorBoundary } from "@/components/shell/AppShellErrorBoundary";
 
 export default function AuthenticatedAppLayout({
   children,
 }: Readonly<{
   children: ReactNode;
 }>) {
-  return <AppShell>{children}</AppShell>;
+  return (
+    <AppShellErrorBoundary>
+      <AppShell>{children}</AppShell>
+    </AppShellErrorBoundary>
+  );
 }

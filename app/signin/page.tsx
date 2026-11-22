@@ -7,12 +7,14 @@ import {
   useSignInWithUsernamePassword,
   useSignUpWithUsernamePassword,
 } from "@convex-dev/auth/methods/username-password/react";
+import { useConvexAuth } from "convex/react";
 import { Dumbbell } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { api } from "@/convex/_generated/api";
 
 export default function SignIn() {
+  const { isAuthenticated } = useConvexAuth();
   const { signIn, pending: signInPending } = useSignInWithUsernamePassword(
     api.auth,
   );
@@ -26,6 +28,12 @@ export default function SignIn() {
   const [redirecting, setRedirecting] = useState(false);
   const loading = signInPending || signUpPending || redirecting;
   const router = useRouter();
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      router.replace("/workouts");
+    }
+  }, [isAuthenticated, router]);
 
   const switchFlow = (nextFlow: "signIn" | "signUp") => {
     setFlow(nextFlow);
@@ -87,6 +95,9 @@ export default function SignIn() {
             className="mt-6 flex flex-col gap-4"
             onSubmit={(e) => {
               e.preventDefault();
+              if (loading) {
+                return;
+              }
               setError(null);
               void (flow === "signIn" ? signIn : signUp)({
                 username,
@@ -94,7 +105,7 @@ export default function SignIn() {
               }).then((result) => {
                 if (result.status === "complete") {
                   setRedirecting(true);
-                  router.push("/workouts");
+                  router.replace("/workouts");
                 } else {
                   setError(errorMessage(result.userError));
                 }

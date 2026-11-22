@@ -81,14 +81,16 @@ export const completeOnboarding = mutation({
   handler: async (ctx, args) => {
     const userId = await requireAuthUserId(ctx);
 
-    const parsedRest = parseRestSeconds(
-      args.defaultRestSeconds ?? DEFAULT_REST_SECONDS,
-    );
-    if (parsedRest.kind === "error") {
-      throw new ConvexError({
-        code: "INVALID_ARGUMENT",
-        message: parsedRest.message,
-      });
+    let validatedArgRest: number | undefined;
+    if (args.defaultRestSeconds !== undefined) {
+      const parsedArgRest = parseRestSeconds(args.defaultRestSeconds);
+      if (parsedArgRest.kind === "error") {
+        throw new ConvexError({
+          code: "INVALID_ARGUMENT",
+          message: parsedArgRest.message,
+        });
+      }
+      validatedArgRest = parsedArgRest.seconds;
     }
 
     const existing = await ctx.db
@@ -103,18 +105,25 @@ export const completeOnboarding = mutation({
       };
     }
 
+    const restSeconds =
+      validatedArgRest ??
+      (existing !== null &&
+      parseRestSeconds(existing.defaultRestSeconds).kind === "ok"
+        ? existing.defaultRestSeconds
+        : DEFAULT_REST_SECONDS);
+
     let settingsId = existing?._id;
     if (settingsId === undefined) {
       settingsId = await ctx.db.insert("userSettings", {
         userId,
         unit: args.unit,
-        defaultRestSeconds: parsedRest.seconds,
+        defaultRestSeconds: restSeconds,
         onboardingCompleted: true,
       });
     } else {
       await ctx.db.patch("userSettings", settingsId, {
         unit: args.unit,
-        defaultRestSeconds: parsedRest.seconds,
+        defaultRestSeconds: restSeconds,
         onboardingCompleted: true,
       });
     }
@@ -125,7 +134,7 @@ export const completeOnboarding = mutation({
       settings: {
         _id: settingsId,
         unit: args.unit,
-        defaultRestSeconds: parsedRest.seconds,
+        defaultRestSeconds: restSeconds,
         onboardingCompleted: true,
       },
       templatesCreated,

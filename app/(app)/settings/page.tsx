@@ -1,10 +1,9 @@
 "use client";
 
-import { useAuthActions } from "@convex-dev/auth/react";
 import { useConvexAuth, useMutation, useQuery } from "convex/react";
 import { Check, LogOut, Minus, Plus, Scale, Timer } from "lucide-react";
-import { useRouter } from "next/navigation";
 import { type FormEvent, useEffect, useRef, useState } from "react";
+import { useAppShellSignOut } from "@/components/shell/AppShellSignOutContext";
 import { api } from "@/convex/_generated/api";
 import {
   DEFAULT_REST_SECONDS,
@@ -35,8 +34,7 @@ export default function SettingsPage() {
     isAuthenticated ? {} : "skip",
   );
   const updateSettings = useMutation(api.userSettings.updateSettings);
-  const { signOut } = useAuthActions();
-  const router = useRouter();
+  const { signOut, signingOut, signOutError } = useAppShellSignOut();
 
   const [unitSaving, setUnitSaving] = useState(false);
   const [unitSaved, setUnitSaved] = useState(false);
@@ -46,9 +44,6 @@ export default function SettingsPage() {
   const [restSaving, setRestSaving] = useState(false);
   const [restSaved, setRestSaved] = useState(false);
   const [restError, setRestError] = useState<string | null>(null);
-
-  const [signingOut, setSigningOut] = useState(false);
-  const [signOutError, setSignOutError] = useState<string | null>(null);
 
   const unitSavedTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
     null,
@@ -206,25 +201,6 @@ export default function SettingsPage() {
     }
   }
 
-  async function handleSignOut() {
-    if (signingOut) {
-      return;
-    }
-
-    setSigningOut(true);
-    setSignOutError(null);
-    try {
-      await signOut();
-      router.replace("/signin");
-      router.refresh();
-    } catch (error) {
-      setSignOutError(
-        getConvexErrorMessage(error, "Could not sign out. Please try again."),
-      );
-      setSigningOut(false);
-    }
-  }
-
   const isLoadingSettings = appShellState === undefined;
 
   return (
@@ -290,34 +266,42 @@ export default function SettingsPage() {
               )}
             </div>
 
-            <div
-              role="radiogroup"
-              aria-label="Preferred weight unit"
-              className="grid grid-cols-2 gap-1.5 rounded-xl bg-surface-subtle p-1.5"
-            >
-              {WEIGHT_UNIT_OPTIONS.map((option) => {
-                const isSelected = currentUnit === option.value;
-                return (
-                  <button
-                    key={option.value}
-                    type="button"
-                    role="radio"
-                    aria-checked={isSelected}
-                    disabled={unitSaving || settings === null}
-                    onClick={() => {
-                      void handleSelectUnit(option.value);
-                    }}
-                    className={`min-h-12 rounded-lg px-3 py-2 text-sm font-semibold transition-colors cursor-pointer disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand ${
-                      isSelected
-                        ? "bg-brand text-white shadow-xs"
-                        : "text-ink-muted hover:text-ink"
-                    }`}
-                  >
-                    {option.label}
-                  </button>
-                );
-              })}
-            </div>
+            <fieldset>
+              <legend className="sr-only">Preferred weight unit</legend>
+              <div className="grid grid-cols-2 gap-1.5 rounded-xl bg-surface-subtle p-1.5">
+                {WEIGHT_UNIT_OPTIONS.map((option) => {
+                  const isSelected = currentUnit === option.value;
+                  const isDisabled = unitSaving || settings === null;
+                  return (
+                    <label
+                      key={option.value}
+                      className={`min-h-12 flex items-center justify-center rounded-lg px-3 py-2 text-sm font-semibold transition-colors has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-brand has-[:focus-visible]:ring-offset-1 ${
+                        isSelected
+                          ? "bg-brand text-white shadow-xs"
+                          : "text-ink-muted hover:text-ink"
+                      } ${
+                        isDisabled
+                          ? "cursor-not-allowed opacity-60"
+                          : "cursor-pointer"
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="settings-weight-unit"
+                        value={option.value}
+                        checked={isSelected}
+                        disabled={isDisabled}
+                        onChange={() => {
+                          void handleSelectUnit(option.value);
+                        }}
+                        className="sr-only"
+                      />
+                      <span>{option.label}</span>
+                    </label>
+                  );
+                })}
+              </div>
+            </fieldset>
 
             {unitError !== null && (
               <p
@@ -373,7 +357,7 @@ export default function SettingsPage() {
               <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
                 {REST_TIMER_PRESETS.map((preset) => {
                   const isActive =
-                    draftRestInput === null && currentRestSeconds === preset;
+                    !hasRestDraftChanges && currentRestSeconds === preset;
                   return (
                     <button
                       key={preset}
@@ -430,9 +414,14 @@ export default function SettingsPage() {
                   disabled={restSaving || settings === null}
                   value={restInputValue}
                   onChange={(event) => {
+                    const nextValue = event.target.value;
                     setRestError(null);
                     setRestSaved(false);
-                    setDraftRestInput(event.target.value);
+                    setDraftRestInput(
+                      nextValue.trim() === String(currentRestSeconds)
+                        ? null
+                        : nextValue,
+                    );
                   }}
                   className="min-h-11 w-24 flex-1 sm:flex-none rounded-xl border border-border bg-surface-subtle px-3.5 text-center text-base font-semibold text-ink tabular-nums outline-none transition-colors focus:border-brand focus:bg-surface focus:ring-2 focus:ring-brand/20 disabled:opacity-60"
                 />
@@ -489,9 +478,7 @@ export default function SettingsPage() {
         <button
           type="button"
           disabled={signingOut}
-          onClick={() => {
-            void handleSignOut();
-          }}
+          onClick={signOut}
           className="inline-flex min-h-11 w-full sm:w-auto items-center justify-center gap-2 rounded-xl border border-danger/30 bg-danger-tint px-5 py-2.5 text-sm font-semibold text-danger transition-colors hover:bg-danger hover:text-white cursor-pointer disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger"
         >
           <LogOut className="h-4 w-4" aria-hidden="true" />

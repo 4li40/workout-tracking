@@ -13,6 +13,7 @@ export type ActiveWorkoutSummary = NonNullable<
 
 export type AppShellState =
   | { readonly kind: "loading" }
+  | { readonly kind: "signing_out" }
   | { readonly kind: "unauthenticated" }
   | { readonly kind: "needs_onboarding"; readonly initialUnit: WeightUnit }
   | {
@@ -24,15 +25,22 @@ export type AppShellState =
 export interface DeriveAppShellStateInput {
   readonly authLoading: boolean;
   readonly isAuthenticated: boolean;
+  readonly hasAuthToken: boolean;
+  readonly signingOut: boolean;
   readonly shellData: AppShellQueryData | undefined;
 }
 
 export function deriveAppShellState({
   authLoading,
   isAuthenticated,
+  hasAuthToken,
+  signingOut,
   shellData,
 }: DeriveAppShellStateInput): AppShellState {
-  if (authLoading) {
+  if (signingOut) {
+    return { kind: "signing_out" };
+  }
+  if (authLoading || (hasAuthToken && !isAuthenticated)) {
     return { kind: "loading" };
   }
   if (!isAuthenticated) {

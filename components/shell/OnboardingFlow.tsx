@@ -1,12 +1,13 @@
 "use client";
 
 import { useMutation } from "convex/react";
-import { Check, Dumbbell } from "lucide-react";
+import { Check, Dumbbell, LogOut } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
 import { api } from "@/convex/_generated/api";
 import type { WeightUnit } from "@/convex/lib/validators";
 import { getConvexErrorMessage } from "@/lib/convexError";
+import { useAppShellSignOut } from "./AppShellSignOutContext";
 
 const UNIT_OPTIONS: ReadonlyArray<{
   readonly value: WeightUnit;
@@ -49,10 +50,16 @@ export function OnboardingFlow({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const completeOnboarding = useMutation(api.userSettings.completeOnboarding);
+  const { signOut, signingOut, signOutError } = useAppShellSignOut();
   const router = useRouter();
   const pathname = usePathname();
+  const busy = submitting || signingOut;
+  const visibleError = error ?? signOutError;
 
   const handleComplete = async () => {
+    if (busy) {
+      return;
+    }
     setError(null);
     setSubmitting(true);
     try {
@@ -88,31 +95,31 @@ export function OnboardingFlow({
           </div>
         </div>
 
-        <section className="mt-6">
-          <h2 className="text-sm font-semibold text-ink">
+        <fieldset className="mt-6">
+          <legend className="text-sm font-semibold text-ink">
             Preferred weight unit
-          </h2>
-          <div
-            role="radiogroup"
-            aria-label="Preferred weight unit"
-            className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2"
-          >
+          </legend>
+          <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
             {UNIT_OPTIONS.map((option) => {
               const selected = unit === option.value;
               return (
-                <button
+                <label
                   key={option.value}
-                  type="button"
-                  role="radio"
-                  aria-checked={selected}
-                  disabled={submitting}
-                  onClick={() => setUnit(option.value)}
-                  className={`min-h-[88px] rounded-xl border p-4 text-left transition-all cursor-pointer disabled:cursor-not-allowed ${
+                  className={`block min-h-[88px] rounded-xl border p-4 text-left transition-all has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-brand has-[:focus-visible]:ring-offset-2 ${
                     selected
                       ? "border-brand bg-brand-tint ring-2 ring-brand/15"
                       : "border-border bg-surface hover:border-brand/40"
-                  }`}
+                  } ${busy ? "cursor-not-allowed opacity-60" : "cursor-pointer"}`}
                 >
+                  <input
+                    type="radio"
+                    name="onboarding-weight-unit"
+                    value={option.value}
+                    checked={selected}
+                    disabled={busy}
+                    onChange={() => setUnit(option.value)}
+                    className="sr-only"
+                  />
                   <div className="flex items-start justify-between gap-2">
                     <span className="text-base font-semibold text-ink">
                       {option.title}
@@ -132,11 +139,11 @@ export function OnboardingFlow({
                   <p className="mt-1 text-xs text-ink-muted">
                     {option.subtitle}
                   </p>
-                </button>
+                </label>
               );
             })}
           </div>
-        </section>
+        </fieldset>
 
         <section className="mt-6 rounded-xl border border-border bg-surface-subtle p-4">
           <h2 className="text-sm font-semibold text-ink">
@@ -159,23 +166,36 @@ export function OnboardingFlow({
           </ul>
         </section>
 
-        {error && (
+        {visibleError && (
           <div
             role="alert"
             className="mt-4 rounded-xl border border-danger/25 bg-danger-tint px-4 py-3 text-sm font-medium text-danger"
           >
-            {error}
+            {visibleError}
           </div>
         )}
 
         <button
           type="button"
-          disabled={submitting}
+          disabled={busy}
           onClick={() => void handleComplete()}
           className="mt-6 min-h-12 w-full rounded-xl bg-brand px-4 text-sm font-semibold text-white transition-colors hover:bg-brand-hover cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {submitting ? "Setting up your workouts..." : "Start training"}
         </button>
+
+        <div className="mt-4 pt-4 border-t border-border flex items-center justify-between gap-3">
+          <span className="text-xs text-ink-muted">Wrong account?</span>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={signOut}
+            className="inline-flex min-h-11 items-center gap-1.5 rounded-xl px-3 text-sm font-medium text-ink-muted transition-colors hover:bg-surface-subtle hover:text-ink cursor-pointer disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+          >
+            <LogOut className="h-4 w-4" aria-hidden="true" />
+            <span>{signingOut ? "Signing out..." : "Sign out"}</span>
+          </button>
+        </div>
       </div>
     </main>
   );
