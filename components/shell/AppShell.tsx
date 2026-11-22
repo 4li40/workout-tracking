@@ -147,7 +147,9 @@ export function AppShell({ children }: Readonly<{ children: ReactNode }>) {
 
     case "ready": {
       const showResumeBar =
-        state.activeWorkout !== null && pathname !== "/workouts/active";
+        state.activeWorkout !== null &&
+        pathname !== "/workouts/active" &&
+        pathname !== `/workouts/${state.activeWorkout._id}`;
 
       return (
         <AppShellSignOutContext.Provider value={signOutContextValue}>
