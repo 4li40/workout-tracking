@@ -9,15 +9,19 @@
  */
 
 import type * as auth from "../auth.js";
+import type * as exercises from "../exercises.js";
 import type * as lib_auth from "../lib/auth.js";
+import type * as lib_exercises from "../lib/exercises.js";
 import type * as lib_globalExercises from "../lib/globalExercises.js";
 import type * as lib_settings from "../lib/settings.js";
 import type * as lib_starterTemplates from "../lib/starterTemplates.js";
+import type * as lib_templates from "../lib/templates.js";
 import type * as lib_validators from "../lib/validators.js";
 import type * as seed from "../seed.js";
 import type * as templates from "../templates.js";
 import type * as userSettings from "../userSettings.js";
 import type * as users from "../users.js";
+import type * as workouts from "../workouts.js";
 
 import type {
   ApiFromModules,
@@ -27,15 +31,19 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   auth: typeof auth;
+  exercises: typeof exercises;
   "lib/auth": typeof lib_auth;
+  "lib/exercises": typeof lib_exercises;
   "lib/globalExercises": typeof lib_globalExercises;
   "lib/settings": typeof lib_settings;
   "lib/starterTemplates": typeof lib_starterTemplates;
+  "lib/templates": typeof lib_templates;
   "lib/validators": typeof lib_validators;
   seed: typeof seed;
   templates: typeof templates;
   userSettings: typeof userSettings;
   users: typeof users;
+  workouts: typeof workouts;
 }>;
 
 /**

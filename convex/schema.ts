@@ -51,7 +51,9 @@ export default defineSchema({
     targetSets: v.number(),
     targetReps: v.optional(v.string()),
     restSeconds: v.number(),
-  }).index("by_template_order", ["templateId", "orderIndex"]),
+  })
+    .index("by_template_order", ["templateId", "orderIndex"])
+    .index("by_user_exercise", ["userId", "exerciseId"]),
 
   workouts: defineTable({
     userId: v.id("users"),
