@@ -9,5 +9,11 @@ export const PRIMARY_NAV_ITEMS = [
 export type NavItemId = (typeof PRIMARY_NAV_ITEMS)[number]["id"];
 
 export function isNavItemActive(pathname: string, href: string): boolean {
+  if (
+    href === "/workouts" &&
+    (pathname === "/templates" || pathname.startsWith("/templates/"))
+  ) {
+    return true;
+  }
   return pathname === href || pathname.startsWith(`${href}/`);
 }
