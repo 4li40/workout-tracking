@@ -1,20 +1,23 @@
 import { convexAuthNextjsProxy, nextjsProxyRedirect } from "@/lib/convexAuth";
-
-const signInPages = ["/signin"];
-const protectedPages = ["/", "/server"];
+import { getAuthRedirectTarget } from "@/lib/routeGuard";
 
 export default convexAuthNextjsProxy(async (request, { isAuthenticated }) => {
-  const { pathname } = request.nextUrl;
-  if (signInPages.includes(pathname) && (await isAuthenticated())) {
-    return nextjsProxyRedirect(request, "/");
-  }
-  if (protectedPages.includes(pathname) && !(await isAuthenticated())) {
-    return nextjsProxyRedirect(request, "/signin");
+  const redirectTarget = getAuthRedirectTarget(
+    request.nextUrl.pathname,
+    await isAuthenticated(),
+  );
+  if (redirectTarget !== null) {
+    return nextjsProxyRedirect(request, redirectTarget);
   }
 });
 
 export const config = {
-  // Run on all routes except static assets and the `/auth` route handlers,
-  // which set their own cookies.
-  matcher: ["/((?!auth(?:/|$)|.*\\..*|_next).*)", "/"],
+  // Run on every route except Next.js internals, static files by extension, and
+  // the `/auth` route handlers, which set their own cookies. Match static files
+  // by extension, not by any dot, so page paths like `/exercises/1.5x` stay
+  // protected.
+  matcher: [
+    "/((?!auth(?:/|$)|_next/|.*\\.(?:svg|png|jpe?g|gif|webp|avif|ico|txt|xml|webmanifest|js|css|map|woff2?)$).*)",
+    "/",
+  ],
 };
