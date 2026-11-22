@@ -22,7 +22,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className={figtree.variable}>
-      <body className="bg-canvas text-ink font-sans antialiased">
+      <body className="bg-background text-foreground font-sans antialiased">
         <ConvexAuthNextjsServerProvider>
           {children}
         </ConvexAuthNextjsServerProvider>
