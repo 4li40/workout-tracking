@@ -98,6 +98,24 @@ async function generateTestSubscriptionKeys() {
   };
 }
 
+async function withTestVapidEnv(
+  fn: (vapidEnv: {
+    VAPID_PUBLIC_KEY: string;
+    VAPID_PRIVATE_KEY: string;
+    VAPID_SUBJECT: string;
+  }) => Promise<void>,
+) {
+  const vapidEnv = await generateTestVapidEnv();
+  vi.stubEnv("VAPID_PUBLIC_KEY", vapidEnv.VAPID_PUBLIC_KEY);
+  vi.stubEnv("VAPID_PRIVATE_KEY", vapidEnv.VAPID_PRIVATE_KEY);
+  vi.stubEnv("VAPID_SUBJECT", vapidEnv.VAPID_SUBJECT);
+  try {
+    await fn(vapidEnv);
+  } finally {
+    vi.unstubAllEnvs();
+  }
+}
+
 describe("Web Push subscriptions, auth, and rest timer scheduling", () => {
   it("enforces auth, validation, ownership, and secret protection on push endpoints", async () => {
     const t = createTestConvex();
@@ -137,17 +155,7 @@ describe("Web Push subscriptions, auth, and rest timer scheduling", () => {
       }),
     ).rejects.toThrow(/INVALID_ARGUMENT/i);
 
-    const originalEnv = {
-      VAPID_PUBLIC_KEY: process.env.VAPID_PUBLIC_KEY,
-      VAPID_PRIVATE_KEY: process.env.VAPID_PRIVATE_KEY,
-      VAPID_SUBJECT: process.env.VAPID_SUBJECT,
-    };
-    const vapidEnv = await generateTestVapidEnv();
-    process.env.VAPID_PUBLIC_KEY = vapidEnv.VAPID_PUBLIC_KEY;
-    process.env.VAPID_PRIVATE_KEY = vapidEnv.VAPID_PRIVATE_KEY;
-    process.env.VAPID_SUBJECT = vapidEnv.VAPID_SUBJECT;
-
-    try {
+    await withTestVapidEnv(async (vapidEnv) => {
       const endpoint = "https://push.example.com/alice-device-1";
       await alice.mutation(api.push.upsertSubscription, {
         endpoint,
@@ -178,11 +186,7 @@ describe("Web Push subscriptions, auth, and rest timer scheduling", () => {
       await alice.mutation(api.push.removeSubscription, { endpoint });
       const configAfterRemove = await alice.query(api.push.getPushConfig, {});
       expect(configAfterRemove.subscriptionCount).toBe(0);
-    } finally {
-      process.env.VAPID_PUBLIC_KEY = originalEnv.VAPID_PUBLIC_KEY;
-      process.env.VAPID_PRIVATE_KEY = originalEnv.VAPID_PRIVATE_KEY;
-      process.env.VAPID_SUBJECT = originalEnv.VAPID_SUBJECT;
-    }
+    });
   });
 
   it("schedules, adjusts, cancels, and safely skips completed jobs across workout mutations", async () => {
@@ -314,13 +318,13 @@ describe("Web Push subscriptions, auth, and rest timer scheduling", () => {
         ctx.db.get("workouts", started.workoutId),
       );
       const completedJobId = workoutWithCompletedJob!.restTimerScheduledJobId!;
-      await t.run(async (ctx) => {
-        // Simulate Convex having already executed the scheduled job
-        await ctx.db.patch(
-          completedJobId as unknown as Id<"_scheduled_functions">,
-          { state: { kind: "success" } } as never,
-        );
+      await t.finishAllScheduledFunctions(() => {
+        vi.runAllTimers();
       });
+      const completedJob = await t.run((ctx) =>
+        ctx.db.system.get("_scheduled_functions", completedJobId),
+      );
+      expect(completedJob?.state.kind).toBe("success");
 
       await expect(
         authed.mutation(api.workouts.updateRestTimer, {
@@ -425,16 +429,6 @@ describe("Web Push subscriptions, auth, and rest timer scheduling", () => {
       action: { kind: "start", durationSeconds: 60 },
     });
 
-    const originalEnv = {
-      VAPID_PUBLIC_KEY: process.env.VAPID_PUBLIC_KEY,
-      VAPID_PRIVATE_KEY: process.env.VAPID_PRIVATE_KEY,
-      VAPID_SUBJECT: process.env.VAPID_SUBJECT,
-    };
-    const vapidEnv = await generateTestVapidEnv();
-    process.env.VAPID_PUBLIC_KEY = vapidEnv.VAPID_PUBLIC_KEY;
-    process.env.VAPID_PRIVATE_KEY = vapidEnv.VAPID_PRIVATE_KEY;
-    process.env.VAPID_SUBJECT = vapidEnv.VAPID_SUBJECT;
-
     const sentEndpoints: string[] = [];
     const fetchSpy = vi
       .spyOn(globalThis, "fetch")
@@ -448,9 +442,11 @@ describe("Web Push subscriptions, auth, and rest timer scheduling", () => {
       });
 
     try {
-      await t.action(internal.push.sendRestTimerNotification, {
-        workoutId: started.workoutId,
-        expectedEndsAt: timerRes.restTimerEndsAt!,
+      await withTestVapidEnv(async () => {
+        await t.action(internal.push.sendRestTimerNotification, {
+          workoutId: started.workoutId,
+          expectedEndsAt: timerRes.restTimerEndsAt!,
+        });
       });
 
       expect(sentEndpoints.sort()).toEqual([
@@ -462,9 +458,6 @@ describe("Web Push subscriptions, auth, and rest timer scheduling", () => {
       expect(configAfter.subscriptionCount).toBe(1);
     } finally {
       fetchSpy.mockRestore();
-      process.env.VAPID_PUBLIC_KEY = originalEnv.VAPID_PUBLIC_KEY;
-      process.env.VAPID_PRIVATE_KEY = originalEnv.VAPID_PRIVATE_KEY;
-      process.env.VAPID_SUBJECT = originalEnv.VAPID_SUBJECT;
     }
   });
 });

@@ -7,6 +7,7 @@ export type AuthErrorCode = "UNAUTHENTICATED" | "FORBIDDEN" | "NOT_FOUND";
 
 export type UserOwnedTableName =
   | "userSettings"
+  | "pushSubscriptions"
   | "userExerciseNotes"
   | "workoutTemplates"
   | "templateExercises"

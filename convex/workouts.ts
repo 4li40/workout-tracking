@@ -19,6 +19,7 @@ import {
   parseRestSeconds,
 } from "./lib/settings";
 import { recomputeExerciseRecords } from "./lib/records";
+import { syncRestTimerPushSchedule } from "./lib/restTimerPush";
 import { MAX_TEMPLATE_EXERCISES, validatePermutation } from "./lib/templates";
 import {
   equipmentValidator,
@@ -1130,6 +1131,13 @@ export const upsertSet = mutation({
       await ctx.db.patch("workouts", workout._id, {
         restTimerEndsAt: nextRestTimerEndsAt,
       });
+      await syncRestTimerPushSchedule(ctx, {
+        workoutId: workout._id,
+        userId,
+        previousJobId: workout.restTimerScheduledJobId,
+        restTimerEndsAt: nextRestTimerEndsAt,
+        now,
+      });
       return {
         setId,
         restTimerEndsAt: nextRestTimerEndsAt,
@@ -1222,6 +1230,13 @@ export const updateRestTimer = mutation({
         await ctx.db.patch("workouts", workout._id, {
           restTimerEndsAt: nextEndsAt,
         });
+        await syncRestTimerPushSchedule(ctx, {
+          workoutId: workout._id,
+          userId,
+          previousJobId: workout.restTimerScheduledJobId,
+          restTimerEndsAt: nextEndsAt,
+          now,
+        });
         return { restTimerEndsAt: nextEndsAt, serverNow: now };
       }
 
@@ -1239,6 +1254,13 @@ export const updateRestTimer = mutation({
           await ctx.db.patch("workouts", workout._id, {
             restTimerEndsAt: undefined,
           });
+          await syncRestTimerPushSchedule(ctx, {
+            workoutId: workout._id,
+            userId,
+            previousJobId: workout.restTimerScheduledJobId,
+            restTimerEndsAt: undefined,
+            now,
+          });
           return { restTimerEndsAt: null, serverNow: now };
         }
         const clampedEndsAt = Math.min(
@@ -1248,12 +1270,26 @@ export const updateRestTimer = mutation({
         await ctx.db.patch("workouts", workout._id, {
           restTimerEndsAt: clampedEndsAt,
         });
+        await syncRestTimerPushSchedule(ctx, {
+          workoutId: workout._id,
+          userId,
+          previousJobId: workout.restTimerScheduledJobId,
+          restTimerEndsAt: clampedEndsAt,
+          now,
+        });
         return { restTimerEndsAt: clampedEndsAt, serverNow: now };
       }
 
       case "skip": {
         await ctx.db.patch("workouts", workout._id, {
           restTimerEndsAt: undefined,
+        });
+        await syncRestTimerPushSchedule(ctx, {
+          workoutId: workout._id,
+          userId,
+          previousJobId: workout.restTimerScheduledJobId,
+          restTimerEndsAt: undefined,
+          now,
         });
         return { restTimerEndsAt: null, serverNow: now };
       }
@@ -1521,6 +1557,13 @@ export const finishWorkout = mutation({
       restTimerEndsAt: undefined,
       ...(validatedTitle !== undefined ? { title: validatedTitle } : {}),
       ...(hasNotesArg ? { notes: validatedNotes } : {}),
+    });
+    await syncRestTimerPushSchedule(ctx, {
+      workoutId: workout._id,
+      userId,
+      previousJobId: workout.restTimerScheduledJobId,
+      restTimerEndsAt: undefined,
+      now: finishedAt,
     });
 
     if (ownedTemplate !== null) {
@@ -1920,6 +1963,14 @@ export const discardWorkout = mutation({
         await ctx.db.delete("workoutExercises", workoutExercise._id);
       }
     }
+
+    await syncRestTimerPushSchedule(ctx, {
+      workoutId: workout._id,
+      userId,
+      previousJobId: workout.restTimerScheduledJobId,
+      restTimerEndsAt: undefined,
+      workoutDeleted: true,
+    });
 
     await ctx.db.delete("workouts", workout._id);
     return null;

@@ -17,7 +17,20 @@ export default defineSchema({
     unit: weightUnitValidator,
     defaultRestSeconds: v.number(),
     onboardingCompleted: v.boolean(),
+    restNotificationsEnabled: v.optional(v.boolean()),
+    keepScreenAwake: v.optional(v.boolean()),
   }).index("by_user", ["userId"]),
+
+  pushSubscriptions: defineTable({
+    userId: v.id("users"),
+    endpoint: v.string(),
+    p256dh: v.string(),
+    auth: v.string(),
+    userAgent: v.optional(v.string()),
+    updatedAt: v.number(),
+  })
+    .index("by_user", ["userId"])
+    .index("by_endpoint", ["endpoint"]),
 
   exercises: defineTable({
     userId: v.optional(v.id("users")),
@@ -65,6 +78,7 @@ export default defineSchema({
     finishedAt: v.optional(v.number()),
     notes: v.optional(v.string()),
     restTimerEndsAt: v.optional(v.number()),
+    restTimerScheduledJobId: v.optional(v.id("_scheduled_functions")),
   })
     .index("by_user_status", ["userId", "status"])
     .index("by_user_finishedAt", ["userId", "finishedAt"]),

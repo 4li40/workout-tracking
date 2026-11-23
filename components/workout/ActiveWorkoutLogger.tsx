@@ -2,7 +2,7 @@
 
 import type { OptimisticLocalStore } from "convex/browser";
 import type { FunctionArgs } from "convex/server";
-import { useMutation } from "convex/react";
+import { useConvexAuth, useMutation, useQuery } from "convex/react";
 import {
   Activity,
   AlertTriangle,
@@ -52,6 +52,7 @@ import {
   primeRestTimerAudio,
   recordServerClockSample,
 } from "@/lib/restTimerCue";
+import { useScreenWakeLock } from "@/lib/wakeLock";
 import {
   type ActiveWorkoutDraft,
   clearWorkoutDraft,
@@ -319,6 +320,8 @@ interface ActiveWorkoutLoggerProps {
   readonly draftScopeId: string;
   readonly unit: WeightUnit;
   readonly defaultRestSeconds: number;
+  readonly restNotificationsEnabled: boolean;
+  readonly keepScreenAwake: boolean;
   readonly onDiscardingChange: (discarding: boolean) => void;
   readonly onDiscardedRedirecting: () => void;
 }
@@ -328,9 +331,17 @@ export function ActiveWorkoutLogger({
   draftScopeId,
   unit,
   defaultRestSeconds,
+  restNotificationsEnabled,
+  keepScreenAwake,
   onDiscardingChange,
   onDiscardedRedirecting,
 }: ActiveWorkoutLoggerProps) {
+  useScreenWakeLock(keepScreenAwake);
+  const { isAuthenticated } = useConvexAuth();
+  const pushConfig = useQuery(
+    api.push.getPushConfig,
+    isAuthenticated ? {} : "skip",
+  );
   const [recoveredDraft, setRecoveredDraft] =
     useState<ActiveWorkoutDraft | null>(() => {
       pruneStaleWorkoutDrafts(draftScopeId, workout._id);
@@ -1310,6 +1321,8 @@ export function ActiveWorkoutLogger({
       <RestTimerBar
         restTimerEndsAt={workout.restTimerEndsAt}
         referenceDurationSeconds={referenceRestSeconds}
+        restNotificationsEnabled={restNotificationsEnabled}
+        pushConfigured={pushConfig?.configured ?? false}
         onAdjust={(deltaSeconds) =>
           handleRestTimerAction({ kind: "adjust", deltaSeconds })
         }
