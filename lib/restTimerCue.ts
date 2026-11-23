@@ -1,10 +1,107 @@
 const REST_SOUND_STORAGE_KEY = "workout-tracker:rest-sound:v1";
+const CLOCK_OFFSET_STORAGE_KEY = "workout-tracker:clock-offset-ms:v1";
+const ALERTED_ENDS_AT_STORAGE_KEY = "workout-tracker:alerted-rest-ends-at:v1";
+const MAX_DELAYED_CHIME_MS = 500;
 
 interface WindowWithWebkitAudio extends Window {
   webkitAudioContext?: typeof AudioContext;
 }
 
 let sharedAudioContext: AudioContext | null = null;
+let cachedClockOffsetMs: number | null = null;
+let lastAlertedEndsAtCache: number | null = null;
+
+function getSessionStorage(): Storage | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+  try {
+    return window.sessionStorage ?? null;
+  } catch {
+    return null;
+  }
+}
+
+export function recordServerClockSample(
+  serverNowMs: number,
+  clientNowMs: number = Date.now(),
+): void {
+  if (!Number.isFinite(serverNowMs) || !Number.isFinite(clientNowMs)) {
+    return;
+  }
+  const offset = Math.round(serverNowMs - clientNowMs);
+  cachedClockOffsetMs = offset;
+  const storage = getSessionStorage();
+  if (storage !== null) {
+    try {
+      storage.setItem(CLOCK_OFFSET_STORAGE_KEY, String(offset));
+    } catch {
+      return;
+    }
+  }
+}
+
+function getServerClockOffsetMs(): number {
+  if (cachedClockOffsetMs !== null) {
+    return cachedClockOffsetMs;
+  }
+  const storage = getSessionStorage();
+  if (storage !== null) {
+    try {
+      const raw = storage.getItem(CLOCK_OFFSET_STORAGE_KEY);
+      if (raw !== null) {
+        const parsed = Number(raw);
+        if (Number.isFinite(parsed)) {
+          cachedClockOffsetMs = parsed;
+          return parsed;
+        }
+      }
+    } catch {
+      return 0;
+    }
+  }
+  return 0;
+}
+
+export function getEstimatedServerNowMs(): number {
+  return Date.now() + getServerClockOffsetMs();
+}
+
+export function hasAlertedRestTimer(endsAt: number): boolean {
+  if (lastAlertedEndsAtCache === endsAt) {
+    return true;
+  }
+  const storage = getSessionStorage();
+  if (storage !== null) {
+    try {
+      const raw = storage.getItem(ALERTED_ENDS_AT_STORAGE_KEY);
+      if (raw !== null && Number(raw) === endsAt) {
+        lastAlertedEndsAtCache = endsAt;
+        return true;
+      }
+    } catch {
+      return false;
+    }
+  }
+  return false;
+}
+
+export function markRestTimerAlerted(endsAt: number): void {
+  lastAlertedEndsAtCache = endsAt;
+  const storage = getSessionStorage();
+  if (storage !== null) {
+    try {
+      storage.setItem(ALERTED_ENDS_AT_STORAGE_KEY, String(endsAt));
+    } catch {
+      return;
+    }
+  }
+}
+
+function isAudioContextPaused(ctx: AudioContext): boolean {
+  const state: string = ctx.state;
+  return state === "suspended" || state === "interrupted";
+}
 
 function getAudioContext(): AudioContext | null {
   if (typeof window === "undefined") {
@@ -17,7 +114,7 @@ function getAudioContext(): AudioContext | null {
     if (AudioContextClass === undefined) {
       return null;
     }
-    if (sharedAudioContext === null) {
+    if (sharedAudioContext === null || sharedAudioContext.state === "closed") {
       sharedAudioContext = new AudioContextClass();
     }
     return sharedAudioContext;
@@ -58,7 +155,7 @@ export function primeRestTimerAudio(): void {
     return;
   }
   try {
-    if (ctx.state === "suspended") {
+    if (isAudioContextPaused(ctx)) {
       void ctx.resume().catch(() => {});
     }
   } catch {
@@ -103,19 +200,25 @@ export function triggerRestTimerCompletionCue(soundEnabled: boolean): void {
     try {
       const ctx = getAudioContext();
       if (ctx !== null) {
-        if (ctx.state === "suspended") {
+        if (isAudioContextPaused(ctx)) {
+          const triggeredAt = Date.now();
           void ctx
             .resume()
             .then(() => {
-              playTwoToneChime(ctx);
+              if (
+                Date.now() - triggeredAt <= MAX_DELAYED_CHIME_MS &&
+                ctx.state === "running"
+              ) {
+                playTwoToneChime(ctx);
+              }
             })
             .catch(() => {});
-        } else {
+        } else if (ctx.state === "running") {
           playTwoToneChime(ctx);
         }
       }
     } catch {
-      return;
+      void 0;
     }
   }
 

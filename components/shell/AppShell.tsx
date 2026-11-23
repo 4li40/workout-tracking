@@ -23,6 +23,7 @@ import {
 import { api } from "@/convex/_generated/api";
 import { formatRestDuration } from "@/convex/lib/settings";
 import { getConvexErrorMessage } from "@/lib/convexError";
+import { clearAllWorkoutDrafts } from "@/lib/workoutDraftStorage";
 import {
   isNavItemActive,
   PRIMARY_NAV_ITEMS,
@@ -79,6 +80,7 @@ export function AppShell({ children }: Readonly<{ children: ReactNode }>) {
     signOutInFlightRef.current = true;
     void signOut()
       .then(() => {
+        clearAllWorkoutDrafts();
         router.replace("/signin");
       })
       .catch((error: unknown) => {
@@ -208,7 +210,11 @@ export function AppShell({ children }: Readonly<{ children: ReactNode }>) {
                 <ActiveWorkoutResumeBar activeWorkout={state.activeWorkout} />
               )}
               <main
-                className={`flex-1 ${showResumeBar ? "pb-44" : "pb-24"} md:pb-10`}
+                className={`flex-1 ${
+                  showResumeBar
+                    ? "pb-[calc(12.5rem+env(safe-area-inset-bottom))]"
+                    : "pb-24"
+                } md:pb-10`}
               >
                 {children}
               </main>

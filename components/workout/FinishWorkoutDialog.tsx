@@ -30,31 +30,38 @@ import {
   parseWorkoutTitle,
 } from "@/convex/lib/workouts";
 import { getConvexErrorMessage } from "@/lib/convexError";
+import type { LocalSetDraft } from "@/lib/workoutDraftStorage";
 import type { WorkoutDetail } from "./types";
 
 interface FinishWorkoutDialogProps {
   readonly open: boolean;
   readonly onOpenChange: (open: boolean) => void;
   readonly workout: WorkoutDetail;
+  readonly recoveredSetDrafts: Readonly<Record<string, LocalSetDraft>>;
   readonly initialTitle: string;
   readonly initialNotes: string;
   readonly unit: WeightUnit;
+  readonly onSyncPendingSetDrafts: () => Promise<void>;
   readonly onFinished: () => void;
 }
 
 function FinishWorkoutBody({
   workout,
+  recoveredSetDrafts,
   initialTitle,
   initialNotes,
   unit,
+  onSyncPendingSetDrafts,
   onClose,
   onFinished,
   onBusyChange,
 }: {
   readonly workout: WorkoutDetail;
+  readonly recoveredSetDrafts: Readonly<Record<string, LocalSetDraft>>;
   readonly initialTitle: string;
   readonly initialNotes: string;
   readonly unit: WeightUnit;
+  readonly onSyncPendingSetDrafts: () => Promise<void>;
   readonly onClose: () => void;
   readonly onFinished: () => void;
   readonly onBusyChange: (busy: boolean) => void;
@@ -77,7 +84,26 @@ function FinishWorkoutBody({
     };
   }, [onBusyChange]);
 
-  const summary = computeWorkoutVolumeSummary(workout.exercises);
+  const effectiveExercises = workout.exercises.map((exercise) => ({
+    isBodyweight: exercise.isBodyweight,
+    sets: exercise.sets.map((setDoc) => {
+      const draft = recoveredSetDrafts[setDoc._id];
+      if (draft === undefined) {
+        return setDoc;
+      }
+      return {
+        ...setDoc,
+        setType: draft.setType,
+        weightKg: draft.weightKg,
+        enteredUnit: draft.enteredUnit,
+        reps: draft.reps,
+        completed: draft.completed,
+      };
+    }),
+  }));
+
+  const pendingSetDraftCount = Object.keys(recoveredSetDrafts).length;
+  const summary = computeWorkoutVolumeSummary(effectiveExercises);
   const uncheckedCount = summary.totalSets - summary.completedSets;
   const sourceTemplate = workout.sourceTemplate;
   const showTemplateSync =
@@ -115,6 +141,9 @@ function FinishWorkoutBody({
     onBusyChange(true);
     setError(null);
     try {
+      if (pendingSetDraftCount > 0) {
+        await onSyncPendingSetDrafts();
+      }
       await finishWorkout({
         workoutId: workout._id,
         title: parsedTitle.title,
@@ -170,6 +199,16 @@ function FinishWorkoutBody({
           </p>
         </div>
       </div>
+
+      {pendingSetDraftCount > 0 && (
+        <Alert>
+          <AlertDescription>
+            {pendingSetDraftCount} unsynced local{" "}
+            {pendingSetDraftCount === 1 ? "set" : "sets"} will sync before
+            saving this workout.
+          </AlertDescription>
+        </Alert>
+      )}
 
       {summary.completedSets === 0 ? (
         <Alert variant="destructive">
@@ -298,9 +337,11 @@ export function FinishWorkoutDialog({
   open,
   onOpenChange,
   workout,
+  recoveredSetDrafts,
   initialTitle,
   initialNotes,
   unit,
+  onSyncPendingSetDrafts,
   onFinished,
 }: FinishWorkoutDialogProps) {
   const [busy, setBusy] = useState(false);
@@ -324,11 +365,13 @@ export function FinishWorkoutDialog({
 
         {open && (
           <FinishWorkoutBody
-            key={`${workout._id}-${workout.exercises.length}`}
+            key={workout._id}
             workout={workout}
+            recoveredSetDrafts={recoveredSetDrafts}
             initialTitle={initialTitle}
             initialNotes={initialNotes}
             unit={unit}
+            onSyncPendingSetDrafts={onSyncPendingSetDrafts}
             onClose={() => onOpenChange(false)}
             onFinished={onFinished}
             onBusyChange={setBusy}

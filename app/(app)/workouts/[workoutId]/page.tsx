@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
+import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -245,6 +246,8 @@ function CompletedWorkoutSummary({
 
 function WorkoutDetailContent({ workoutId }: { readonly workoutId: string }) {
   const { isAuthenticated } = useConvexAuth();
+  const [discardInFlight, setDiscardInFlight] = useState(false);
+  const [discardedRedirecting, setDiscardedRedirecting] = useState(false);
   const workout = useQuery(
     api.workouts.get,
     isAuthenticated && workoutId.length > 0 ? { workoutId } : "skip",
@@ -253,6 +256,18 @@ function WorkoutDetailContent({ workoutId }: { readonly workoutId: string }) {
     api.userSettings.getAppShellState,
     isAuthenticated ? {} : "skip",
   );
+
+  if (discardedRedirecting || (discardInFlight && workout === null)) {
+    return (
+      <div className="max-w-2xl mx-auto px-4 py-6 sm:px-6 sm:py-8">
+        <Card>
+          <CardContent className="p-6 text-sm text-muted-foreground">
+            Workout discarded. Returning to workouts...
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   if (workout === undefined || appShellState === undefined) {
     return (
@@ -325,12 +340,17 @@ function WorkoutDetailContent({ workoutId }: { readonly workoutId: string }) {
     return <CompletedWorkoutSummary workout={workout} unit={unit} />;
   }
 
+  const draftScopeId = appShellState.settings?._id ?? "default";
+
   return (
     <ActiveWorkoutLogger
       key={workout._id}
       workout={workout}
+      draftScopeId={draftScopeId}
       unit={unit}
       defaultRestSeconds={defaultRestSeconds}
+      onDiscardingChange={setDiscardInFlight}
+      onDiscardedRedirecting={() => setDiscardedRedirecting(true)}
     />
   );
 }

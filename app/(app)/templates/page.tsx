@@ -51,10 +51,9 @@ export default function TemplatesPage() {
     null,
   );
   const [actionError, setActionError] = useState<string | null>(null);
-  const [activeConflict, setActiveConflict] = useState<{
-    readonly workoutId: Id<"workouts">;
-    readonly title: string;
-  } | null>(null);
+  const [activeConflictTitle, setActiveConflictTitle] = useState<string | null>(
+    null,
+  );
 
   const busy = reordering || duplicatingId !== null || startingId !== null;
 
@@ -114,14 +113,14 @@ export default function TemplatesPage() {
 
     setStartingId(templateId);
     setActionError(null);
-    setActiveConflict(null);
+    setActiveConflictTitle(null);
     try {
       const result = await startWorkout({ templateId });
       if (result.kind === "started") {
         router.push(`/workouts/${result.workoutId}`);
         return;
       }
-      setActiveConflict({ workoutId: result.workoutId, title: result.title });
+      setActiveConflictTitle(result.title);
       setStartingId(null);
     } catch (err) {
       setActionError(
@@ -156,17 +155,15 @@ export default function TemplatesPage() {
         </Button>
       </header>
 
-      {activeConflict !== null && (
+      {activeConflictTitle !== null && (
         <Alert>
           <AlertDescription className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <span>
-              You already have an active workout ({activeConflict.title}).
-              Resume or discard it before starting another.
+              You already have an active workout ({activeConflictTitle}). Resume
+              or discard it before starting another.
             </span>
             <Button asChild size="sm" className="self-start sm:self-auto">
-              <Link href={`/workouts/${activeConflict.workoutId}`}>
-                Resume workout
-              </Link>
+              <Link href="/workouts/active">Resume workout</Link>
             </Button>
           </AlertDescription>
         </Alert>

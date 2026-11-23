@@ -5,7 +5,8 @@ import {
   WEIGHT_EPSILON_KG,
 } from "@/convex/lib/workouts";
 
-const DRAFT_STORAGE_PREFIX = "workout-tracker:active-draft:v1:";
+const LEGACY_DRAFT_STORAGE_PREFIX = "workout-tracker:active-draft:v1:";
+const DRAFT_STORAGE_PREFIX = "workout-tracker:active-draft:v2:";
 
 export interface LocalSetDraft {
   readonly setId: string;
@@ -26,8 +27,12 @@ export interface ActiveWorkoutDraft {
   readonly sets: Readonly<Record<string, LocalSetDraft>>;
 }
 
-function getDraftStorageKey(workoutId: string): string {
-  return `${DRAFT_STORAGE_PREFIX}${workoutId}`;
+function getScopePrefix(scopeId: string): string {
+  return `${DRAFT_STORAGE_PREFIX}${scopeId}:`;
+}
+
+function getDraftStorageKey(scopeId: string, workoutId: string): string {
+  return `${getScopePrefix(scopeId)}${workoutId}`;
 }
 
 function isPlainRecord(value: unknown): value is Record<string, unknown> {
@@ -240,13 +245,16 @@ function getLocalStorage(): Storage | null {
   }
 }
 
-export function readWorkoutDraft(workoutId: string): ActiveWorkoutDraft | null {
+export function readWorkoutDraft(
+  scopeId: string,
+  workoutId: string,
+): ActiveWorkoutDraft | null {
   const storage = getLocalStorage();
   if (storage === null) {
     return null;
   }
   try {
-    const serialized = storage.getItem(getDraftStorageKey(workoutId));
+    const serialized = storage.getItem(getDraftStorageKey(scopeId, workoutId));
     if (serialized === null) {
       return null;
     }
@@ -258,6 +266,7 @@ export function readWorkoutDraft(workoutId: string): ActiveWorkoutDraft | null {
 }
 
 export function writeWorkoutDraft(
+  scopeId: string,
   workoutId: string,
   draft: ActiveWorkoutDraft | null,
 ): void {
@@ -266,7 +275,7 @@ export function writeWorkoutDraft(
     return;
   }
   try {
-    const key = getDraftStorageKey(workoutId);
+    const key = getDraftStorageKey(scopeId, workoutId);
     if (draft === null || countDraftChanges(draft) === 0) {
       storage.removeItem(key);
       return;
@@ -278,10 +287,11 @@ export function writeWorkoutDraft(
 }
 
 export function saveWorkoutSetDraft(
+  scopeId: string,
   workoutId: string,
   setDraft: LocalSetDraft,
 ): void {
-  const existing = readWorkoutDraft(workoutId);
+  const existing = readWorkoutDraft(scopeId, workoutId);
   const nextDraft: ActiveWorkoutDraft = {
     version: 1,
     workoutId,
@@ -293,14 +303,15 @@ export function saveWorkoutSetDraft(
       [setDraft.setId]: setDraft,
     },
   };
-  writeWorkoutDraft(workoutId, nextDraft);
+  writeWorkoutDraft(scopeId, workoutId, nextDraft);
 }
 
 export function saveWorkoutMetaDraft(
+  scopeId: string,
   workoutId: string,
   meta: { readonly title?: string; readonly notes?: string },
 ): void {
-  const existing = readWorkoutDraft(workoutId);
+  const existing = readWorkoutDraft(scopeId, workoutId);
   const title = meta.title !== undefined ? meta.title : existing?.title;
   const notes = meta.notes !== undefined ? meta.notes : existing?.notes;
 
@@ -312,17 +323,21 @@ export function saveWorkoutMetaDraft(
     ...(notes !== undefined ? { notes } : {}),
     sets: existing?.sets ?? {},
   };
-  writeWorkoutDraft(workoutId, nextDraft);
+  writeWorkoutDraft(scopeId, workoutId, nextDraft);
 }
 
-export function clearWorkoutSetDraft(workoutId: string, setId: string): void {
-  const existing = readWorkoutDraft(workoutId);
+export function clearWorkoutSetDraft(
+  scopeId: string,
+  workoutId: string,
+  setId: string,
+): void {
+  const existing = readWorkoutDraft(scopeId, workoutId);
   if (existing === null || !(setId in existing.sets)) {
     return;
   }
   const nextSets = { ...existing.sets };
   delete nextSets[setId];
-  writeWorkoutDraft(workoutId, {
+  writeWorkoutDraft(scopeId, workoutId, {
     ...existing,
     updatedAt: Date.now(),
     sets: nextSets,
@@ -330,16 +345,17 @@ export function clearWorkoutSetDraft(workoutId: string, setId: string): void {
 }
 
 export function clearWorkoutMetaDraft(
+  scopeId: string,
   workoutId: string,
   fields: { readonly title?: boolean; readonly notes?: boolean },
 ): void {
-  const existing = readWorkoutDraft(workoutId);
+  const existing = readWorkoutDraft(scopeId, workoutId);
   if (existing === null) {
     return;
   }
   const title = fields.title ? undefined : existing.title;
   const notes = fields.notes ? undefined : existing.notes;
-  writeWorkoutDraft(workoutId, {
+  writeWorkoutDraft(scopeId, workoutId, {
     version: 1,
     workoutId,
     updatedAt: Date.now(),
@@ -349,24 +365,49 @@ export function clearWorkoutMetaDraft(
   });
 }
 
-export function clearWorkoutDraft(workoutId: string): void {
-  writeWorkoutDraft(workoutId, null);
+export function clearWorkoutDraft(scopeId: string, workoutId: string): void {
+  writeWorkoutDraft(scopeId, workoutId, null);
 }
 
-export function pruneStaleWorkoutDrafts(activeWorkoutId: string): void {
+export function pruneStaleWorkoutDrafts(
+  scopeId: string,
+  activeWorkoutId: string,
+): void {
   const storage = getLocalStorage();
   if (storage === null) {
     return;
   }
-  const activeKey = getDraftStorageKey(activeWorkoutId);
+  const scopePrefix = getScopePrefix(scopeId);
+  const activeKey = getDraftStorageKey(scopeId, activeWorkoutId);
+  try {
+    const keysToRemove: string[] = [];
+    for (let index = 0; index < storage.length; index += 1) {
+      const key = storage.key(index);
+      if (key !== null && key.startsWith(scopePrefix) && key !== activeKey) {
+        keysToRemove.push(key);
+      }
+    }
+    for (const key of keysToRemove) {
+      storage.removeItem(key);
+    }
+  } catch {
+    return;
+  }
+}
+
+export function clearAllWorkoutDrafts(): void {
+  const storage = getLocalStorage();
+  if (storage === null) {
+    return;
+  }
   try {
     const keysToRemove: string[] = [];
     for (let index = 0; index < storage.length; index += 1) {
       const key = storage.key(index);
       if (
         key !== null &&
-        key.startsWith(DRAFT_STORAGE_PREFIX) &&
-        key !== activeKey
+        (key.startsWith(DRAFT_STORAGE_PREFIX) ||
+          key.startsWith(LEGACY_DRAFT_STORAGE_PREFIX))
       ) {
         keysToRemove.push(key);
       }

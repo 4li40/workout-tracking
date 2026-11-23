@@ -22,17 +22,20 @@ interface DiscardWorkoutDialogProps {
   readonly onOpenChange: (open: boolean) => void;
   readonly workoutId: Id<"workouts">;
   readonly workoutTitle: string;
+  readonly onDiscardingChange?: (discarding: boolean) => void;
   readonly onDiscarded: () => void;
 }
 
 function DiscardWorkoutBody({
   workoutId,
   onClose,
+  onDiscardingChange,
   onDiscarded,
   onBusyChange,
 }: {
   readonly workoutId: Id<"workouts">;
   readonly onClose: () => void;
+  readonly onDiscardingChange?: (discarding: boolean) => void;
   readonly onDiscarded: () => void;
   readonly onBusyChange: (busy: boolean) => void;
 }) {
@@ -54,6 +57,7 @@ function DiscardWorkoutBody({
 
     setDiscarding(true);
     onBusyChange(true);
+    onDiscardingChange?.(true);
     setError(null);
     try {
       await discardWorkout({ workoutId });
@@ -70,6 +74,7 @@ function DiscardWorkoutBody({
       );
       setDiscarding(false);
       onBusyChange(false);
+      onDiscardingChange?.(false);
     }
   }
 
@@ -114,6 +119,7 @@ export function DiscardWorkoutDialog({
   onOpenChange,
   workoutId,
   workoutTitle,
+  onDiscardingChange,
   onDiscarded,
 }: DiscardWorkoutDialogProps) {
   const [busy, setBusy] = useState(false);
@@ -138,6 +144,7 @@ export function DiscardWorkoutDialog({
             key={workoutId}
             workoutId={workoutId}
             onClose={() => onOpenChange(false)}
+            onDiscardingChange={onDiscardingChange}
             onDiscarded={onDiscarded}
             onBusyChange={setBusy}
           />

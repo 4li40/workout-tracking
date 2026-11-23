@@ -104,6 +104,8 @@ export function WorkoutSetRow({
 
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const editSequenceRef = useRef(0);
+  const weightFocusedRef = useRef(false);
+  const repsFocusedRef = useRef(false);
   const latestPayloadRef = useRef<UpsertSetCommitPayload>({
     setId: set._id,
     setType: effectiveSetType,
@@ -127,7 +129,10 @@ export function WorkoutSetRow({
     activeWeightDraft !== null ? activeWeightDraft.value : serverWeightText;
   const repsText = repsDraft !== null ? repsDraft : serverRepsText;
 
-  function resolveCurrentValues():
+  function resolveCurrentValues(skip?: {
+    readonly weight?: boolean;
+    readonly reps?: boolean;
+  }):
     | {
         readonly kind: "ok";
         readonly payload: UpsertSetCommitPayload;
@@ -138,7 +143,7 @@ export function WorkoutSetRow({
       } {
     let resolvedWeightKg = effectiveWeightKg;
     let resolvedEnteredUnit = effectiveEnteredUnit;
-    if (activeWeightDraft !== null) {
+    if (!skip?.weight && activeWeightDraft !== null) {
       const parsedWeight = parseWeightInputString(
         activeWeightDraft.value,
         unit,
@@ -151,7 +156,7 @@ export function WorkoutSetRow({
     }
 
     let resolvedReps = effectiveReps;
-    if (repsDraft !== null) {
+    if (!skip?.reps && repsDraft !== null) {
       const parsedReps = parseRepsInputString(repsDraft);
       if (parsedReps.kind === "error") {
         return parsedReps;
@@ -202,12 +207,16 @@ export function WorkoutSetRow({
       if (editSequenceRef.current === capturedSeq) {
         onClearLocalDraft(payload.setId);
       }
-      setWeightDraft((current) =>
-        current === capturedWeightDraft ? null : current,
-      );
-      setRepsDraft((current) =>
-        current === capturedRepsDraft ? null : current,
-      );
+      if (!weightFocusedRef.current) {
+        setWeightDraft((current) =>
+          current === capturedWeightDraft ? null : current,
+        );
+      }
+      if (!repsFocusedRef.current) {
+        setRepsDraft((current) =>
+          current === capturedRepsDraft ? null : current,
+        );
+      }
     } catch {
       return;
     }
@@ -227,13 +236,14 @@ export function WorkoutSetRow({
     }, SET_SAVE_DEBOUNCE_MS);
   }
 
-  function flushPendingCommit() {
+  function flushPendingCommit(): boolean {
     if (debounceTimerRef.current === null) {
-      return;
+      return false;
     }
     clearDebounceTimer();
     const seq = editSequenceRef.current;
     void executeCommit(latestPayloadRef.current, weightDraft, repsDraft, seq);
+    return true;
   }
 
   function commitImmediate(
@@ -241,7 +251,10 @@ export function WorkoutSetRow({
     options?: { readonly clearDraftInputs?: boolean },
   ) {
     clearDebounceTimer();
-    const resolved = resolveCurrentValues();
+    const resolved = resolveCurrentValues({
+      weight: overrides.weightKg !== undefined,
+      reps: overrides.reps !== undefined,
+    });
     if (resolved.kind === "error") {
       setInlineError(resolved.message);
       return;
@@ -498,8 +511,23 @@ export function WorkoutSetRow({
           aria-invalid={inlineError !== null}
           placeholder="0"
           value={weightText}
-          onFocus={onActivate}
-          onBlur={flushPendingCommit}
+          onFocus={() => {
+            weightFocusedRef.current = true;
+            onActivate();
+          }}
+          onBlur={() => {
+            weightFocusedRef.current = false;
+            const flushed = flushPendingCommit();
+            if (
+              !flushed &&
+              inlineError === null &&
+              activeWeightDraft !== null &&
+              parseWeightInputString(activeWeightDraft.value, unit).kind ===
+                "ok"
+            ) {
+              setWeightDraft(null);
+            }
+          }}
           onChange={(event) => handleWeightChange(event.target.value)}
           className={`px-2 text-center text-sm font-semibold tabular-nums ${
             effectiveCompleted
@@ -515,8 +543,22 @@ export function WorkoutSetRow({
           aria-invalid={inlineError !== null}
           placeholder="0"
           value={repsText}
-          onFocus={onActivate}
-          onBlur={flushPendingCommit}
+          onFocus={() => {
+            repsFocusedRef.current = true;
+            onActivate();
+          }}
+          onBlur={() => {
+            repsFocusedRef.current = false;
+            const flushed = flushPendingCommit();
+            if (
+              !flushed &&
+              inlineError === null &&
+              repsDraft !== null &&
+              parseRepsInputString(repsDraft).kind === "ok"
+            ) {
+              setRepsDraft(null);
+            }
+          }}
           onChange={(event) => handleRepsChange(event.target.value)}
           className={`px-2 text-center text-sm font-semibold tabular-nums ${
             effectiveCompleted

@@ -19,7 +19,7 @@ import {
   WifiOff,
 } from "lucide-react";
 import Link from "next/link";
-import { type FormEvent, useEffect, useState } from "react";
+import { type FormEvent, useEffect, useRef, useState } from "react";
 import { ExercisePickerDialog } from "@/components/exercises/ExercisePickerDialog";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -47,7 +47,11 @@ import {
   SET_TYPE_META,
 } from "@/convex/lib/workouts";
 import { getConvexErrorMessage } from "@/lib/convexError";
-import { primeRestTimerAudio } from "@/lib/restTimerCue";
+import {
+  getEstimatedServerNowMs,
+  primeRestTimerAudio,
+  recordServerClockSample,
+} from "@/lib/restTimerCue";
 import {
   type ActiveWorkoutDraft,
   clearWorkoutDraft,
@@ -79,14 +83,19 @@ type ExercisePickerTarget =
     };
 
 function ElapsedHeaderTimer({ startedAt }: { readonly startedAt: number }) {
-  const [nowMs, setNowMs] = useState(() => Date.now());
+  const [nowMs, setNowMs] = useState(() => getEstimatedServerNowMs());
 
   useEffect(() => {
-    const intervalId = window.setInterval(() => {
-      setNowMs(Date.now());
-    }, 1000);
+    const syncNow = () => {
+      setNowMs(getEstimatedServerNowMs());
+    };
+    const intervalId = window.setInterval(syncNow, 1000);
+    document.addEventListener("visibilitychange", syncNow);
+    window.addEventListener("focus", syncNow);
     return () => {
       window.clearInterval(intervalId);
+      document.removeEventListener("visibilitychange", syncNow);
+      window.removeEventListener("focus", syncNow);
     };
   }, []);
 
@@ -129,7 +138,7 @@ function createUpsertSetOptimisticUpdate(workoutId: Id<"workouts">) {
     if (args.setId === undefined) {
       return;
     }
-    const now = Date.now();
+    const now = getEstimatedServerNowMs();
     const current = localStore.getQuery(api.workouts.get, { workoutId });
     if (current === undefined || current === null) {
       return;
@@ -247,7 +256,7 @@ function createRestTimerOptimisticUpdate(workoutId: Id<"workouts">) {
     localStore: OptimisticLocalStore,
     args: FunctionArgs<typeof api.workouts.updateRestTimer>,
   ) => {
-    const now = Date.now();
+    const now = getEstimatedServerNowMs();
     const current = localStore.getQuery(api.workouts.get, { workoutId });
     if (current === undefined || current === null) {
       return;
@@ -307,24 +316,30 @@ function createRestTimerOptimisticUpdate(workoutId: Id<"workouts">) {
 
 interface ActiveWorkoutLoggerProps {
   readonly workout: WorkoutDetail;
+  readonly draftScopeId: string;
   readonly unit: WeightUnit;
   readonly defaultRestSeconds: number;
+  readonly onDiscardingChange: (discarding: boolean) => void;
+  readonly onDiscardedRedirecting: () => void;
 }
 
 export function ActiveWorkoutLogger({
   workout,
+  draftScopeId,
   unit,
   defaultRestSeconds,
+  onDiscardingChange,
+  onDiscardedRedirecting,
 }: ActiveWorkoutLoggerProps) {
   const [recoveredDraft, setRecoveredDraft] =
     useState<ActiveWorkoutDraft | null>(() => {
-      pruneStaleWorkoutDrafts(workout._id);
-      const stored = readWorkoutDraft(workout._id);
+      pruneStaleWorkoutDrafts(draftScopeId, workout._id);
+      const stored = readWorkoutDraft(draftScopeId, workout._id);
       if (stored === null) {
         return null;
       }
       const reconciled = reconcileDraftWithServer(stored, workout);
-      writeWorkoutDraft(workout._id, reconciled);
+      writeWorkoutDraft(draftScopeId, workout._id, reconciled);
       return reconciled;
     });
 
@@ -335,9 +350,12 @@ export function ActiveWorkoutLogger({
   const [draftResetVersion, setDraftResetVersion] = useState(0);
 
   const [editingTitle, setEditingTitle] = useState(false);
-  const [titleDraft, setTitleDraft] = useState<string | null>(
-    () => recoveredDraft?.title ?? null,
-  );
+  const [titleDraft, setTitleDraft] = useState<string | null>(() => {
+    const recoveredTitle = recoveredDraft?.title;
+    return recoveredTitle !== undefined && recoveredTitle.trim().length > 0
+      ? recoveredTitle
+      : null;
+  });
   const [titleSaving, setTitleSaving] = useState(false);
 
   const [notesOpen, setNotesOpen] = useState(
@@ -349,18 +367,23 @@ export function ActiveWorkoutLogger({
     () => recoveredDraft?.notes ?? null,
   );
   const [notesSaving, setNotesSaving] = useState(false);
+  const resetNotesButtonRef = useRef<HTMLButtonElement | null>(null);
+  const skipNextNotesBlurRef = useRef(false);
 
   const [selectedSetId, setSelectedSetId] = useState<Id<"sets"> | null>(null);
   const [addingExerciseSetId, setAddingExerciseSetId] =
     useState<Id<"workoutExercises"> | null>(null);
   const [deletingSetId, setDeletingSetId] = useState<Id<"sets"> | null>(null);
+  const [removingExerciseId, setRemovingExerciseId] =
+    useState<Id<"workoutExercises"> | null>(null);
   const [reordering, setReordering] = useState(false);
   const [timerBusy, setTimerBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
 
-  const [pickerTarget, setPickerTarget] = useState<ExercisePickerTarget | null>(
-    null,
-  );
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [pickerTarget, setPickerTarget] = useState<ExercisePickerTarget>({
+    kind: "add",
+  });
   const [finishOpen, setFinishOpen] = useState(false);
   const [discardOpen, setDiscardOpen] = useState(false);
 
@@ -467,14 +490,86 @@ export function ActiveWorkoutLogger({
   );
 
   function refreshRecoveredDraftState() {
-    const stored = readWorkoutDraft(workout._id);
+    const stored = readWorkoutDraft(draftScopeId, workout._id);
     if (stored === null) {
       setRecoveredDraft(null);
       return;
     }
     const reconciled = reconcileDraftWithServer(stored, workout);
-    writeWorkoutDraft(workout._id, reconciled);
+    writeWorkoutDraft(draftScopeId, workout._id, reconciled);
     setRecoveredDraft(reconciled);
+  }
+
+  function clearRecoveredDraftMeta(fields: {
+    readonly title?: boolean;
+    readonly notes?: boolean;
+  }) {
+    clearWorkoutMetaDraft(draftScopeId, workout._id, fields);
+    setRecoveredDraft((current) => {
+      if (current === null) {
+        return null;
+      }
+      const nextTitle = fields.title ? undefined : current.title;
+      const nextNotes = fields.notes ? undefined : current.notes;
+      const next: ActiveWorkoutDraft = {
+        version: 1,
+        workoutId: current.workoutId,
+        updatedAt: current.updatedAt,
+        ...(nextTitle !== undefined ? { title: nextTitle } : {}),
+        ...(nextNotes !== undefined ? { notes: nextNotes } : {}),
+        sets: current.sets,
+      };
+      return countDraftChanges(next) === 0 ? null : next;
+    });
+  }
+
+  function clearRecoveredDraftSetState(setId: Id<"sets">) {
+    setRecoveredDraft((current) => {
+      if (current === null || !(setId in current.sets)) {
+        return current;
+      }
+      const nextSets = { ...current.sets };
+      delete nextSets[setId];
+      const next: ActiveWorkoutDraft = {
+        ...current,
+        sets: nextSets,
+      };
+      return countDraftChanges(next) === 0 ? null : next;
+    });
+  }
+
+  function clearRecoveredDraftSet(setId: Id<"sets">) {
+    clearWorkoutSetDraft(draftScopeId, workout._id, setId);
+    clearRecoveredDraftSetState(setId);
+  }
+
+  async function syncPendingSetDrafts() {
+    const stored = readWorkoutDraft(draftScopeId, workout._id);
+    if (stored === null) {
+      setRecoveredDraft(null);
+      return;
+    }
+    const reconciled = reconcileDraftWithServer(stored, workout);
+    if (reconciled === null) {
+      writeWorkoutDraft(draftScopeId, workout._id, null);
+      setRecoveredDraft(null);
+      return;
+    }
+
+    for (const setDraft of Object.values(reconciled.sets)) {
+      const result = await upsertSet({
+        workoutExerciseId: setDraft.workoutExerciseId as Id<"workoutExercises">,
+        setId: setDraft.setId as Id<"sets">,
+        setType: setDraft.setType,
+        weightKg: setDraft.weightKg,
+        enteredUnit: setDraft.enteredUnit,
+        reps: setDraft.reps,
+        completed: setDraft.completed,
+        autoStartRestTimer: false,
+      });
+      recordServerClockSample(result.serverNow);
+      clearRecoveredDraftSet(setDraft.setId as Id<"sets">);
+    }
   }
 
   async function handleSyncRecoveredDraft() {
@@ -482,53 +577,59 @@ export function ActiveWorkoutLogger({
       return;
     }
 
+    const stored = readWorkoutDraft(draftScopeId, workout._id);
+    if (stored === null) {
+      setRecoveredDraft(null);
+      return;
+    }
+    const currentDraft = reconcileDraftWithServer(stored, workout);
+    if (currentDraft === null) {
+      writeWorkoutDraft(draftScopeId, workout._id, null);
+      setRecoveredDraft(null);
+      return;
+    }
+
     setSyncingDraft(true);
     setActionError(null);
     try {
       if (
-        recoveredDraft.title !== undefined ||
-        recoveredDraft.notes !== undefined
+        currentDraft.title !== undefined ||
+        currentDraft.notes !== undefined
       ) {
         const titleCheck =
-          recoveredDraft.title !== undefined
-            ? parseWorkoutTitle(recoveredDraft.title)
+          currentDraft.title !== undefined
+            ? parseWorkoutTitle(currentDraft.title)
             : null;
         const notesCheck =
-          recoveredDraft.notes !== undefined
-            ? parseWorkoutNotes(recoveredDraft.notes)
+          currentDraft.notes !== undefined
+            ? parseWorkoutNotes(currentDraft.notes)
             : null;
 
-        await updateWorkoutDetails({
-          workoutId: workout._id,
-          ...(titleCheck?.kind === "ok" ? { title: titleCheck.title } : {}),
-          ...(notesCheck?.kind === "ok"
-            ? { notes: notesCheck.notes ?? "" }
-            : {}),
+        const hasValidMetaUpdate =
+          titleCheck?.kind === "ok" || notesCheck?.kind === "ok";
+        if (hasValidMetaUpdate) {
+          await updateWorkoutDetails({
+            workoutId: workout._id,
+            ...(titleCheck?.kind === "ok" ? { title: titleCheck.title } : {}),
+            ...(notesCheck?.kind === "ok"
+              ? { notes: notesCheck.notes ?? "" }
+              : {}),
+          });
+        }
+
+        clearRecoveredDraftMeta({
+          title: currentDraft.title !== undefined,
+          notes: currentDraft.notes !== undefined,
         });
-        clearWorkoutMetaDraft(workout._id, { title: true, notes: true });
-        if (titleCheck?.kind === "ok") {
+        if (currentDraft.title !== undefined) {
           setTitleDraft(null);
         }
-        if (notesCheck?.kind === "ok") {
+        if (currentDraft.notes !== undefined) {
           setNotesDraft(null);
         }
       }
 
-      for (const setDraft of Object.values(recoveredDraft.sets)) {
-        await upsertSet({
-          workoutExerciseId:
-            setDraft.workoutExerciseId as Id<"workoutExercises">,
-          setId: setDraft.setId as Id<"sets">,
-          setType: setDraft.setType,
-          weightKg: setDraft.weightKg,
-          enteredUnit: setDraft.enteredUnit,
-          reps: setDraft.reps,
-          completed: setDraft.completed,
-          autoStartRestTimer: false,
-        });
-        clearWorkoutSetDraft(workout._id, setDraft.setId);
-      }
-
+      await syncPendingSetDrafts();
       setRecoveredDraft(null);
     } catch (err) {
       setActionError(
@@ -544,7 +645,7 @@ export function ActiveWorkoutLogger({
   }
 
   function handleDiscardLocalDraft() {
-    clearWorkoutDraft(workout._id);
+    clearWorkoutDraft(draftScopeId, workout._id);
     setRecoveredDraft(null);
     setTitleDraft(null);
     setNotesDraft(null);
@@ -565,7 +666,7 @@ export function ActiveWorkoutLogger({
     }
 
     if (parsed.title === workout.title) {
-      clearWorkoutMetaDraft(workout._id, { title: true });
+      clearRecoveredDraftMeta({ title: true });
       setTitleDraft(null);
       setEditingTitle(false);
       return;
@@ -578,11 +679,11 @@ export function ActiveWorkoutLogger({
         workoutId: workout._id,
         title: parsed.title,
       });
-      clearWorkoutMetaDraft(workout._id, { title: true });
+      clearRecoveredDraftMeta({ title: true });
       setTitleDraft(null);
       setEditingTitle(false);
     } catch (err) {
-      saveWorkoutMetaDraft(workout._id, { title: parsed.title });
+      saveWorkoutMetaDraft(draftScopeId, workout._id, { title: parsed.title });
       refreshRecoveredDraftState();
       setActionError(
         getConvexErrorMessage(err, "Could not update workout title."),
@@ -605,7 +706,7 @@ export function ActiveWorkoutLogger({
     const normalizedNext = parsed.notes ?? "";
     const serverNotes = workout.notes ?? "";
     if (normalizedNext === serverNotes) {
-      clearWorkoutMetaDraft(workout._id, { notes: true });
+      clearRecoveredDraftMeta({ notes: true });
       setNotesDraft(null);
       return;
     }
@@ -617,10 +718,10 @@ export function ActiveWorkoutLogger({
         workoutId: workout._id,
         notes: normalizedNext,
       });
-      clearWorkoutMetaDraft(workout._id, { notes: true });
+      clearRecoveredDraftMeta({ notes: true });
       setNotesDraft(null);
     } catch (err) {
-      saveWorkoutMetaDraft(workout._id, { notes: nextRaw });
+      saveWorkoutMetaDraft(draftScopeId, workout._id, { notes: nextRaw });
       refreshRecoveredDraftState();
       setActionError(
         getConvexErrorMessage(err, "Could not save session notes."),
@@ -640,12 +741,15 @@ export function ActiveWorkoutLogger({
     const existingSet = existingExercise?.sets.find(
       (item) => item._id === payload.setId,
     );
+    const existingDraft = recoveredSetDrafts[payload.setId];
+    const wasCompleted = existingDraft?.completed ?? existingSet?.completed;
     const transitionedToCompleted =
-      existingSet !== undefined && !existingSet.completed && payload.completed;
+      wasCompleted !== undefined && !wasCompleted && payload.completed;
 
+    clearRecoveredDraftSetState(payload.setId);
     setActionError(null);
     try {
-      await upsertSet({
+      const result = await upsertSet({
         workoutExerciseId,
         setId: payload.setId,
         setType: payload.setType,
@@ -654,9 +758,12 @@ export function ActiveWorkoutLogger({
         reps: payload.reps,
         completed: payload.completed,
       });
+      recordServerClockSample(result.serverNow);
 
-      if (transitionedToCompleted && selectedSetId === payload.setId) {
-        setSelectedSetId(null);
+      if (transitionedToCompleted) {
+        setSelectedSetId((current) =>
+          current === payload.setId ? null : current,
+        );
       }
     } catch (err) {
       setActionError(
@@ -690,6 +797,7 @@ export function ActiveWorkoutLogger({
         reps: lastDraft?.reps ?? lastSet?.reps ?? 0,
         completed: false,
       });
+      recordServerClockSample(result.serverNow);
       setSelectedSetId(result.setId);
     } catch (err) {
       setActionError(
@@ -708,10 +816,8 @@ export function ActiveWorkoutLogger({
     setActionError(null);
     try {
       await deleteSet({ setId });
-      clearWorkoutSetDraft(workout._id, setId);
-      if (selectedSetId === setId) {
-        setSelectedSetId(null);
-      }
+      clearRecoveredDraftSet(setId);
+      setSelectedSetId((current) => (current === setId ? null : current));
     } catch (err) {
       setActionError(
         getConvexErrorMessage(err, "Could not delete set. Please try again."),
@@ -722,7 +828,7 @@ export function ActiveWorkoutLogger({
   }
 
   async function handleReorderExercise(fromIndex: number, toIndex: number) {
-    if (reordering) {
+    if (reordering || removingExerciseId !== null) {
       return;
     }
     const nextList = reorderByIndex(workout.exercises, fromIndex, toIndex);
@@ -743,12 +849,19 @@ export function ActiveWorkoutLogger({
   }
 
   async function handleRemoveExercise(workoutExercise: WorkoutExerciseDetail) {
-    setActionError(null);
-    await removeWorkoutExercise({ workoutExerciseId: workoutExercise._id });
-    for (const setDoc of workoutExercise.sets) {
-      clearWorkoutSetDraft(workout._id, setDoc._id);
+    if (reordering || removingExerciseId !== null) {
+      return;
     }
-    refreshRecoveredDraftState();
+    setRemovingExerciseId(workoutExercise._id);
+    setActionError(null);
+    try {
+      await removeWorkoutExercise({ workoutExerciseId: workoutExercise._id });
+      for (const setDoc of workoutExercise.sets) {
+        clearRecoveredDraftSet(setDoc._id);
+      }
+    } finally {
+      setRemovingExerciseId(null);
+    }
   }
 
   function handleRestTimerAction(
@@ -763,6 +876,9 @@ export function ActiveWorkoutLogger({
     setTimerBusy(true);
     setActionError(null);
     void updateRestTimer({ workoutId: workout._id, action })
+      .then((result) => {
+        recordServerClockSample(result.serverNow);
+      })
       .catch((err: unknown) => {
         setActionError(
           getConvexErrorMessage(err, "Could not update rest timer."),
@@ -872,7 +988,13 @@ export function ActiveWorkoutLogger({
                 onChange={(event) => {
                   const next = event.target.value;
                   setTitleDraft(next === workout.title ? null : next);
-                  saveWorkoutMetaDraft(workout._id, { title: next });
+                  if (next === workout.title || next.trim().length === 0) {
+                    clearRecoveredDraftMeta({ title: true });
+                  } else {
+                    saveWorkoutMetaDraft(draftScopeId, workout._id, {
+                      title: next,
+                    });
+                  }
                 }}
                 className="text-base font-semibold"
               />
@@ -886,7 +1008,7 @@ export function ActiveWorkoutLogger({
                   variant="ghost"
                   disabled={titleSaving}
                   onClick={() => {
-                    clearWorkoutMetaDraft(workout._id, { title: true });
+                    clearRecoveredDraftMeta({ title: true });
                     setTitleDraft(null);
                     setEditingTitle(false);
                   }}
@@ -957,10 +1079,27 @@ export function ActiveWorkoutLogger({
                 placeholder="Sleep, warmup feel, belt or strap notes for today..."
                 onChange={(event) => {
                   const next = event.target.value;
-                  setNotesDraft(next === (workout.notes ?? "") ? null : next);
-                  saveWorkoutMetaDraft(workout._id, { notes: next });
+                  const serverNotes = workout.notes ?? "";
+                  setNotesDraft(next === serverNotes ? null : next);
+                  if (next === serverNotes) {
+                    clearRecoveredDraftMeta({ notes: true });
+                  } else {
+                    saveWorkoutMetaDraft(draftScopeId, workout._id, {
+                      notes: next,
+                    });
+                  }
                 }}
-                onBlur={() => {
+                onBlur={(event) => {
+                  if (skipNextNotesBlurRef.current) {
+                    skipNextNotesBlurRef.current = false;
+                    return;
+                  }
+                  if (
+                    resetNotesButtonRef.current !== null &&
+                    event.relatedTarget === resetNotesButtonRef.current
+                  ) {
+                    return;
+                  }
                   if (notesDraft !== null) {
                     void handleSaveNotes(notesDraft);
                   }
@@ -969,12 +1108,31 @@ export function ActiveWorkoutLogger({
               {notesDraft !== null && (
                 <div className="flex items-center justify-end gap-2">
                   <Button
+                    ref={resetNotesButtonRef}
                     type="button"
                     size="sm"
                     variant="ghost"
                     disabled={notesSaving}
+                    onMouseDown={(event) => {
+                      event.preventDefault();
+                    }}
+                    onPointerDown={(event) => {
+                      if (event.pointerType !== "mouse") {
+                        skipNextNotesBlurRef.current = true;
+                      }
+                    }}
+                    onPointerUp={() => {
+                      skipNextNotesBlurRef.current = false;
+                    }}
+                    onPointerLeave={() => {
+                      skipNextNotesBlurRef.current = false;
+                    }}
+                    onPointerCancel={() => {
+                      skipNextNotesBlurRef.current = false;
+                    }}
                     onClick={() => {
-                      clearWorkoutMetaDraft(workout._id, { notes: true });
+                      skipNextNotesBlurRef.current = false;
+                      clearRecoveredDraftMeta({ notes: true });
                       setNotesDraft(null);
                     }}
                   >
@@ -1077,7 +1235,10 @@ export function ActiveWorkoutLogger({
             </div>
             <Button
               type="button"
-              onClick={() => setPickerTarget({ kind: "add" })}
+              onClick={() => {
+                setPickerTarget({ kind: "add" });
+                setPickerOpen(true);
+              }}
             >
               <Plus className="size-4" aria-hidden="true" />
               <span>Add exercise</span>
@@ -1088,14 +1249,15 @@ export function ActiveWorkoutLogger({
         <div key={draftResetVersion} className="space-y-4">
           {workout.exercises.map((exercise, index) => (
             <WorkoutExerciseCard
-              key={exercise._id}
+              key={`${exercise._id}-${exercise.exerciseId}`}
               exercise={exercise}
               index={index}
               totalCount={workout.exercises.length}
               unit={unit}
               activeSetId={activeSetId}
               recoveredSetDrafts={recoveredSetDrafts}
-              listBusy={reordering}
+              listBusy={reordering || removingExerciseId !== null}
+              removing={removingExerciseId === exercise._id}
               addingSet={addingExerciseSetId === exercise._id}
               deletingSetId={deletingSetId}
               onActivateSet={(setId) => setSelectedSetId(setId)}
@@ -1105,35 +1267,24 @@ export function ActiveWorkoutLogger({
               onMoveDown={() => {
                 void handleReorderExercise(index, index + 1);
               }}
-              onOpenSwap={() =>
+              onOpenSwap={() => {
                 setPickerTarget({
                   kind: "swap",
                   workoutExerciseId: exercise._id,
                   currentExerciseId: exercise.exerciseId,
                   currentExerciseName: exercise.exerciseName,
-                })
-              }
+                });
+                setPickerOpen(true);
+              }}
               onRemoveExercise={() => handleRemoveExercise(exercise)}
               onAddSet={handleAddSet}
               onCommitSet={handleCommitSet}
               onDeleteSet={handleDeleteSet}
               onWriteLocalSetDraft={(draft: LocalSetDraft) => {
-                saveWorkoutSetDraft(workout._id, draft);
+                saveWorkoutSetDraft(draftScopeId, workout._id, draft);
               }}
               onClearLocalSetDraft={(setId: Id<"sets">) => {
-                clearWorkoutSetDraft(workout._id, setId);
-                setRecoveredDraft((current) => {
-                  if (current === null || !(setId in current.sets)) {
-                    return current;
-                  }
-                  const nextSets = { ...current.sets };
-                  delete nextSets[setId];
-                  const next: ActiveWorkoutDraft = {
-                    ...current,
-                    sets: nextSets,
-                  };
-                  return countDraftChanges(next) === 0 ? null : next;
-                });
+                clearRecoveredDraftSet(setId);
               }}
             />
           ))}
@@ -1145,7 +1296,10 @@ export function ActiveWorkoutLogger({
           <Button
             type="button"
             variant="outline"
-            onClick={() => setPickerTarget({ kind: "add" })}
+            onClick={() => {
+              setPickerTarget({ kind: "add" });
+              setPickerOpen(true);
+            }}
             className="w-full"
           >
             <Plus className="size-4 text-primary" aria-hidden="true" />
@@ -1167,41 +1321,37 @@ export function ActiveWorkoutLogger({
       />
 
       <ExercisePickerDialog
-        open={pickerTarget !== null}
-        onOpenChange={(nextOpen) => {
-          if (!nextOpen) {
-            setPickerTarget(null);
-          }
-        }}
-        mode={pickerTarget?.kind === "swap" ? "single" : "multi"}
+        open={pickerOpen}
+        onOpenChange={setPickerOpen}
+        mode={pickerTarget.kind === "swap" ? "single" : "multi"}
         resetKey={
-          pickerTarget?.kind === "swap"
+          pickerTarget.kind === "swap"
             ? `swap-${pickerTarget.workoutExerciseId}`
             : `add-${workout._id}`
         }
         title={
-          pickerTarget?.kind === "swap"
+          pickerTarget.kind === "swap"
             ? `Swap ${pickerTarget.currentExerciseName}`
             : "Add exercises"
         }
         description={
-          pickerTarget?.kind === "swap"
+          pickerTarget.kind === "swap"
             ? "Choose a replacement movement. Existing sets stay ready for the new lift."
             : "Tap Add on any lifts you want to include in this workout."
         }
-        actionLabel={pickerTarget?.kind === "swap" ? "Swap" : "Add"}
+        actionLabel={pickerTarget.kind === "swap" ? "Swap" : "Add"}
         busyActionLabel={
-          pickerTarget?.kind === "swap" ? "Swapping..." : "Adding..."
+          pickerTarget.kind === "swap" ? "Swapping..." : "Adding..."
         }
         existingLabel="In workout"
         existingExerciseIds={existingExerciseIds}
         excludeExerciseId={
-          pickerTarget?.kind === "swap"
+          pickerTarget.kind === "swap"
             ? pickerTarget.currentExerciseId
             : undefined
         }
         onSelectExercise={async (exerciseId) => {
-          if (pickerTarget?.kind === "swap") {
+          if (pickerTarget.kind === "swap") {
             const targetWorkoutExercise = workout.exercises.find(
               (item) => item._id === pickerTarget.workoutExerciseId,
             );
@@ -1211,10 +1361,9 @@ export function ActiveWorkoutLogger({
             });
             if (targetWorkoutExercise !== undefined) {
               for (const setDoc of targetWorkoutExercise.sets) {
-                clearWorkoutSetDraft(workout._id, setDoc._id);
+                clearRecoveredDraftSet(setDoc._id);
               }
             }
-            refreshRecoveredDraftState();
             return;
           }
           const created = await addWorkoutExercise({
@@ -1224,7 +1373,7 @@ export function ActiveWorkoutLogger({
           setSelectedSetId(created.setId);
         }}
         errorFallback={
-          pickerTarget?.kind === "swap"
+          pickerTarget.kind === "swap"
             ? "Could not swap exercise. Please try again."
             : "Could not add exercise to workout. Please try again."
         }
@@ -1234,11 +1383,13 @@ export function ActiveWorkoutLogger({
         open={finishOpen}
         onOpenChange={setFinishOpen}
         workout={workout}
+        recoveredSetDrafts={recoveredSetDrafts}
         initialTitle={currentTitle}
         initialNotes={currentNotes}
         unit={unit}
+        onSyncPendingSetDrafts={syncPendingSetDrafts}
         onFinished={() => {
-          clearWorkoutDraft(workout._id);
+          clearWorkoutDraft(draftScopeId, workout._id);
           setRecoveredDraft(null);
         }}
       />
@@ -1248,8 +1399,10 @@ export function ActiveWorkoutLogger({
         onOpenChange={setDiscardOpen}
         workoutId={workout._id}
         workoutTitle={currentTitle}
+        onDiscardingChange={onDiscardingChange}
         onDiscarded={() => {
-          clearWorkoutDraft(workout._id);
+          clearWorkoutDraft(draftScopeId, workout._id);
+          onDiscardedRedirecting();
         }}
       />
     </div>
