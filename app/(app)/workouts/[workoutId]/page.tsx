@@ -486,6 +486,9 @@ function WorkoutDetailContent({ workoutId }: { readonly workoutId: string }) {
   }
 
   const draftScopeId = appShellState.settings?._id ?? "default";
+  const restNotificationsEnabled =
+    appShellState.settings?.restNotificationsEnabled ?? false;
+  const keepScreenAwake = appShellState.settings?.keepScreenAwake ?? false;
 
   return (
     <ActiveWorkoutLogger
@@ -494,6 +497,8 @@ function WorkoutDetailContent({ workoutId }: { readonly workoutId: string }) {
       draftScopeId={draftScopeId}
       unit={unit}
       defaultRestSeconds={defaultRestSeconds}
+      restNotificationsEnabled={restNotificationsEnabled}
+      keepScreenAwake={keepScreenAwake}
       onDiscardingChange={setDiscardInFlight}
       onDiscardedRedirecting={() => setDiscardedRedirecting(true)}
     />

@@ -1,7 +1,16 @@
 "use client";
 
 import { useConvexAuth, useMutation, useQuery } from "convex/react";
-import { Check, LogOut, Minus, Plus, Scale, Timer } from "lucide-react";
+import {
+  Bell,
+  Check,
+  LogOut,
+  Minus,
+  Plus,
+  Scale,
+  Smartphone,
+  Timer,
+} from "lucide-react";
 import { type FormEvent, useEffect, useRef, useState } from "react";
 import { useAppShellSignOut } from "@/components/shell/AppShellSignOutContext";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -11,6 +20,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Switch } from "@/components/ui/switch";
 import { api } from "@/convex/_generated/api";
 import {
   DEFAULT_REST_SECONDS,
@@ -22,6 +32,14 @@ import {
 } from "@/convex/lib/settings";
 import type { WeightUnit } from "@/convex/lib/validators";
 import { getConvexErrorMessage } from "@/lib/convexError";
+import {
+  getExistingPushSubscription,
+  getPushCapability,
+  type PushCapability,
+  subscribeToPushNotifications,
+  unsubscribeFromPushNotifications,
+} from "@/lib/pushNotifications";
+import { isWakeLockSupported } from "@/lib/wakeLock";
 
 const REST_STEP_SECONDS = 15;
 const SAVED_BADGE_MS = 2500;
@@ -40,7 +58,13 @@ export default function SettingsPage() {
     api.userSettings.getAppShellState,
     isAuthenticated ? {} : "skip",
   );
+  const pushConfig = useQuery(
+    api.push.getPushConfig,
+    isAuthenticated ? {} : "skip",
+  );
   const updateSettings = useMutation(api.userSettings.updateSettings);
+  const upsertSubscription = useMutation(api.push.upsertSubscription);
+  const removeSubscription = useMutation(api.push.removeSubscription);
   const { signOut, signingOut, signOutError } = useAppShellSignOut();
 
   const [unitSaving, setUnitSaving] = useState(false);
@@ -52,12 +76,54 @@ export default function SettingsPage() {
   const [restSaved, setRestSaved] = useState(false);
   const [restError, setRestError] = useState<string | null>(null);
 
+  const [pushCapability, setPushCapability] = useState<PushCapability | null>(
+    null,
+  );
+  const [thisDeviceSubscribed, setThisDeviceSubscribed] = useState<
+    boolean | null
+  >(null);
+  const [wakeLockSupported, setWakeLockSupported] = useState<boolean | null>(
+    null,
+  );
+  const [alertsSaving, setAlertsSaving] = useState(false);
+  const [alertsSaved, setAlertsSaved] = useState(false);
+  const [alertsError, setAlertsError] = useState<string | null>(null);
+
   const unitSavedTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
     null,
   );
   const restSavedTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
     null,
   );
+  const alertsSavedTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
+
+  useEffect(() => {
+    let active = true;
+    const syncId = window.setTimeout(() => {
+      if (!active) {
+        return;
+      }
+      setPushCapability(getPushCapability());
+      setWakeLockSupported(isWakeLockSupported());
+      void getExistingPushSubscription()
+        .then((sub) => {
+          if (active) {
+            setThisDeviceSubscribed(sub !== null);
+          }
+        })
+        .catch(() => {
+          if (active) {
+            setThisDeviceSubscribed(false);
+          }
+        });
+    }, 0);
+    return () => {
+      active = false;
+      window.clearTimeout(syncId);
+    };
+  }, [pushConfig?.subscriptionCount]);
 
   useEffect(() => {
     return () => {
@@ -67,6 +133,9 @@ export default function SettingsPage() {
       if (restSavedTimeoutRef.current !== null) {
         clearTimeout(restSavedTimeoutRef.current);
       }
+      if (alertsSavedTimeoutRef.current !== null) {
+        clearTimeout(alertsSavedTimeoutRef.current);
+      }
     };
   }, []);
 
@@ -74,10 +143,22 @@ export default function SettingsPage() {
   const currentUnit = settings?.unit ?? "kg";
   const currentRestSeconds =
     settings?.defaultRestSeconds ?? DEFAULT_REST_SECONDS;
+  const restNotificationsEnabled = settings?.restNotificationsEnabled ?? false;
+  const keepScreenAwake = settings?.keepScreenAwake ?? false;
   const restInputValue = draftRestInput ?? String(currentRestSeconds);
   const hasRestDraftChanges =
     draftRestInput !== null &&
     draftRestInput.trim() !== String(currentRestSeconds);
+
+  function showAlertsSaved() {
+    setAlertsSaved(true);
+    if (alertsSavedTimeoutRef.current !== null) {
+      clearTimeout(alertsSavedTimeoutRef.current);
+    }
+    alertsSavedTimeoutRef.current = setTimeout(() => {
+      setAlertsSaved(false);
+    }, SAVED_BADGE_MS);
+  }
 
   function showUnitSaved() {
     setUnitSaved(true);
@@ -205,6 +286,112 @@ export default function SettingsPage() {
       );
     } finally {
       setRestSaving(false);
+    }
+  }
+
+  async function handleToggleRestNotifications(nextEnabled: boolean) {
+    if (settings === null || alertsSaving) {
+      return;
+    }
+
+    setAlertsSaving(true);
+    setAlertsError(null);
+    setAlertsSaved(false);
+    try {
+      if (nextEnabled) {
+        if (
+          pushConfig === undefined ||
+          !pushConfig.configured ||
+          pushConfig.publicKey === null
+        ) {
+          throw new Error(
+            "Background push notifications are not configured on this deployment yet.",
+          );
+        }
+        const subscription = await subscribeToPushNotifications(
+          pushConfig.publicKey,
+        );
+        await upsertSubscription(subscription);
+        await updateSettings({ restNotificationsEnabled: true });
+        setThisDeviceSubscribed(true);
+        setPushCapability(getPushCapability());
+      } else {
+        await updateSettings({ restNotificationsEnabled: false });
+        const removedEndpoint = await unsubscribeFromPushNotifications();
+        if (removedEndpoint !== null) {
+          await removeSubscription({ endpoint: removedEndpoint });
+        }
+        setThisDeviceSubscribed(false);
+      }
+      showAlertsSaved();
+    } catch (error) {
+      setPushCapability(getPushCapability());
+      setAlertsError(
+        getConvexErrorMessage(
+          error,
+          "Could not update background rest alerts. Please try again.",
+        ),
+      );
+    } finally {
+      setAlertsSaving(false);
+    }
+  }
+
+  async function handleSubscribeThisDevice() {
+    if (
+      settings === null ||
+      alertsSaving ||
+      pushConfig === undefined ||
+      !pushConfig.configured ||
+      pushConfig.publicKey === null
+    ) {
+      return;
+    }
+
+    setAlertsSaving(true);
+    setAlertsError(null);
+    setAlertsSaved(false);
+    try {
+      const subscription = await subscribeToPushNotifications(
+        pushConfig.publicKey,
+      );
+      await upsertSubscription(subscription);
+      setThisDeviceSubscribed(true);
+      setPushCapability(getPushCapability());
+      showAlertsSaved();
+    } catch (error) {
+      setPushCapability(getPushCapability());
+      setAlertsError(
+        getConvexErrorMessage(
+          error,
+          "Could not subscribe this device for push alerts.",
+        ),
+      );
+    } finally {
+      setAlertsSaving(false);
+    }
+  }
+
+  async function handleToggleKeepScreenAwake(nextEnabled: boolean) {
+    if (settings === null || alertsSaving) {
+      return;
+    }
+
+    setAlertsSaving(true);
+    setAlertsError(null);
+    setAlertsSaved(false);
+    try {
+      await updateSettings({ keepScreenAwake: nextEnabled });
+      showAlertsSaved();
+    } catch (error) {
+      setAlertsError(
+        getConvexErrorMessage(
+          error,
+          "Could not save screen wake lock preference.",
+        ),
+      );
+    } finally {
+      setAlertsSaving(false);
     }
   }
 
@@ -470,6 +657,180 @@ export default function SettingsPage() {
                   </Alert>
                 )}
               </form>
+            </section>
+          </Card>
+
+          <Card asChild>
+            <section id="workout-alerts" className="p-5 sm:p-6 space-y-5">
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-accent text-primary">
+                    <Bell className="h-5 w-5" aria-hidden="true" />
+                  </div>
+                  <div>
+                    <h2 className="text-base font-semibold text-foreground">
+                      Workout alerts &amp; screen
+                    </h2>
+                    <p className="text-sm text-muted-foreground">
+                      Deliver lock-screen alerts when rest ends or keep your
+                      display awake during active workouts.
+                    </p>
+                  </div>
+                </div>
+                {alertsSaved && (
+                  <Badge
+                    role="status"
+                    variant="success"
+                    className="shrink-0 py-1 font-medium"
+                  >
+                    <Check className="size-3.5" aria-hidden="true" />
+                    Saved
+                  </Badge>
+                )}
+              </div>
+
+              <div className="space-y-4 border-t border-border pt-4">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="space-y-1">
+                    <Label
+                      htmlFor="rest-notifications-switch"
+                      className="text-sm font-medium text-foreground"
+                    >
+                      Background rest alerts
+                    </Label>
+                    <p className="text-xs leading-relaxed text-muted-foreground">
+                      Sends a Web Push notification when your rest timer reaches
+                      00:00 while the app is backgrounded or your phone is
+                      locked.
+                    </p>
+
+                    {pushConfig !== undefined && !pushConfig.configured ? (
+                      <p className="text-xs font-medium text-warning">
+                        Push notifications require VAPID environment keys on
+                        this Convex deployment.
+                      </p>
+                    ) : pushCapability?.kind === "ios_install_required" ? (
+                      <p className="text-xs font-medium text-primary">
+                        On iPhone and iPad, install via Share &rarr; Add to Home
+                        Screen first to enable lock-screen alerts.
+                      </p>
+                    ) : pushCapability?.kind === "unsupported" ? (
+                      <p className="text-xs text-muted-foreground">
+                        {pushCapability.reason}
+                      </p>
+                    ) : pushCapability?.kind === "ready" &&
+                      pushCapability.permission === "denied" ? (
+                      <p className="text-xs font-medium text-destructive">
+                        Notifications are blocked for this site. Re-enable them
+                        in your browser or device settings.
+                      </p>
+                    ) : restNotificationsEnabled &&
+                      pushConfig?.configured &&
+                      thisDeviceSubscribed === false ? (
+                      <div className="flex flex-wrap items-center gap-2 pt-1">
+                        <span className="text-xs text-muted-foreground">
+                          Enabled on your account (
+                          {pushConfig.subscriptionCount}{" "}
+                          {pushConfig.subscriptionCount === 1
+                            ? "device"
+                            : "devices"}
+                          ), but this browser is not subscribed.
+                        </span>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="secondary"
+                          disabled={alertsSaving}
+                          onClick={() => {
+                            void handleSubscribeThisDevice();
+                          }}
+                        >
+                          Subscribe this device
+                        </Button>
+                      </div>
+                    ) : restNotificationsEnabled && pushConfig?.configured ? (
+                      <p className="text-xs font-medium text-success">
+                        Active on this device ({pushConfig.subscriptionCount}{" "}
+                        {pushConfig.subscriptionCount === 1
+                          ? "device"
+                          : "devices"}{" "}
+                        subscribed).
+                      </p>
+                    ) : null}
+                  </div>
+
+                  <Switch
+                    id="rest-notifications-switch"
+                    checked={restNotificationsEnabled}
+                    disabled={
+                      alertsSaving ||
+                      settings === null ||
+                      pushConfig === undefined ||
+                      (!restNotificationsEnabled &&
+                        (!pushConfig.configured ||
+                          pushCapability?.kind === "ios_install_required" ||
+                          pushCapability?.kind === "unsupported"))
+                    }
+                    onCheckedChange={(checked) => {
+                      void handleToggleRestNotifications(checked);
+                    }}
+                  />
+                </div>
+
+                <div className="flex items-start justify-between gap-4 border-t border-border pt-4">
+                  <div className="space-y-1">
+                    <Label
+                      htmlFor="keep-screen-awake-switch"
+                      className="text-sm font-medium text-foreground"
+                    >
+                      Keep screen awake
+                    </Label>
+                    <p className="text-xs leading-relaxed text-muted-foreground">
+                      Prevents your screen from dimming or locking while an
+                      active workout logger is visible.
+                    </p>
+                    {wakeLockSupported === false && (
+                      <p className="text-xs text-muted-foreground">
+                        Screen Wake Lock is not supported in this browser.
+                      </p>
+                    )}
+                  </div>
+
+                  <Switch
+                    id="keep-screen-awake-switch"
+                    checked={keepScreenAwake}
+                    disabled={alertsSaving || settings === null}
+                    onCheckedChange={(checked) => {
+                      void handleToggleKeepScreenAwake(checked);
+                    }}
+                  />
+                </div>
+              </div>
+
+              {alertsError !== null && (
+                <Alert variant="destructive">
+                  <AlertDescription>{alertsError}</AlertDescription>
+                </Alert>
+              )}
+
+              <div className="flex items-start gap-2.5 rounded-xl border border-border bg-secondary/40 p-3.5 text-xs leading-relaxed text-muted-foreground">
+                <Smartphone
+                  className="mt-0.5 size-4 shrink-0 text-primary"
+                  aria-hidden="true"
+                />
+                <div className="space-y-1">
+                  <p className="font-medium text-foreground">
+                    Mobile PWA behavior
+                  </p>
+                  <p>
+                    Background rest alerts deliver a Web Push notification at
+                    00:00 even when the app is backgrounded or locked. On iOS
+                    16.4+, you must add the app to your Home Screen first;
+                    live-ticking lock-screen widgets (Live Activities) are
+                    native-only and unavailable to web PWAs.
+                  </p>
+                </div>
+              </div>
             </section>
           </Card>
         </>

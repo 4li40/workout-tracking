@@ -2,6 +2,7 @@ import { ConvexError, v } from "convex/values";
 import type { Doc } from "./_generated/dataModel";
 import { mutation, query } from "./_generated/server";
 import { requireAuthUserId } from "./lib/auth";
+import { syncActiveWorkoutRestTimerPushSchedule } from "./lib/restTimerPush";
 import { DEFAULT_REST_SECONDS, parseRestSeconds } from "./lib/settings";
 import { seedStarterTemplatesForUser } from "./lib/starterTemplates";
 import { weightUnitValidator } from "./lib/validators";
@@ -11,6 +12,8 @@ const userSettingsSnapshotValidator = v.object({
   unit: weightUnitValidator,
   defaultRestSeconds: v.number(),
   onboardingCompleted: v.boolean(),
+  restNotificationsEnabled: v.boolean(),
+  keepScreenAwake: v.boolean(),
 });
 
 const activeWorkoutSummaryValidator = v.object({
@@ -26,6 +29,8 @@ function toSettingsSnapshot(doc: Doc<"userSettings">) {
     unit: doc.unit,
     defaultRestSeconds: doc.defaultRestSeconds,
     onboardingCompleted: doc.onboardingCompleted,
+    restNotificationsEnabled: doc.restNotificationsEnabled ?? false,
+    keepScreenAwake: doc.keepScreenAwake ?? false,
   };
 }
 
@@ -136,6 +141,8 @@ export const completeOnboarding = mutation({
         unit: args.unit,
         defaultRestSeconds: restSeconds,
         onboardingCompleted: true,
+        restNotificationsEnabled: existing?.restNotificationsEnabled ?? false,
+        keepScreenAwake: existing?.keepScreenAwake ?? false,
       },
       templatesCreated,
     };
@@ -146,6 +153,8 @@ export const updateSettings = mutation({
   args: {
     unit: v.optional(weightUnitValidator),
     defaultRestSeconds: v.optional(v.number()),
+    restNotificationsEnabled: v.optional(v.boolean()),
+    keepScreenAwake: v.optional(v.boolean()),
   },
   returns: userSettingsSnapshotValidator,
   handler: async (ctx, args) => {
@@ -176,7 +185,13 @@ export const updateSettings = mutation({
     }
 
     const patch: Partial<
-      Pick<Doc<"userSettings">, "unit" | "defaultRestSeconds">
+      Pick<
+        Doc<"userSettings">,
+        | "unit"
+        | "defaultRestSeconds"
+        | "restNotificationsEnabled"
+        | "keepScreenAwake"
+      >
     > = {};
     if (args.unit !== undefined) {
       patch.unit = args.unit;
@@ -184,9 +199,23 @@ export const updateSettings = mutation({
     if (validatedRestSeconds !== undefined) {
       patch.defaultRestSeconds = validatedRestSeconds;
     }
+    if (args.restNotificationsEnabled !== undefined) {
+      patch.restNotificationsEnabled = args.restNotificationsEnabled;
+    }
+    if (args.keepScreenAwake !== undefined) {
+      patch.keepScreenAwake = args.keepScreenAwake;
+    }
 
     if (Object.keys(patch).length > 0) {
       await ctx.db.patch("userSettings", existing._id, patch);
+    }
+
+    if (
+      args.restNotificationsEnabled !== undefined &&
+      args.restNotificationsEnabled !==
+        (existing.restNotificationsEnabled ?? false)
+    ) {
+      await syncActiveWorkoutRestTimerPushSchedule(ctx, userId);
     }
 
     return {
@@ -194,6 +223,12 @@ export const updateSettings = mutation({
       unit: args.unit ?? existing.unit,
       defaultRestSeconds: validatedRestSeconds ?? existing.defaultRestSeconds,
       onboardingCompleted: existing.onboardingCompleted,
+      restNotificationsEnabled:
+        args.restNotificationsEnabled ??
+        existing.restNotificationsEnabled ??
+        false,
+      keepScreenAwake:
+        args.keepScreenAwake ?? existing.keepScreenAwake ?? false,
     };
   },
 });

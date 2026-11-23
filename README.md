@@ -31,6 +31,22 @@ For a production deployment, run it once after the first deploy and again whenev
 npx convex run seed:seedGlobalExercises --prod
 ```
 
+## Background rest timer alerts (Web Push / VAPID)
+
+Optional server-scheduled Web Push notifications can alert lifters when a rest timer finishes while the phone is locked or the PWA is backgrounded. To enable them on your Convex deployment, generate a VAPID key pair and set the three Convex environment variables:
+
+```bash
+npx web-push generate-vapid-keys
+npx convex env set VAPID_PUBLIC_KEY "<public-key>"
+npx convex env set VAPID_PRIVATE_KEY "<private-key>"
+npx convex env set VAPID_SUBJECT "mailto:alerts@example.com"
+```
+
+Mobile PWA notes:
+
+- **iOS / iPadOS (16.4+):** Web Push only works after installing the app via **Share -> Add to Home Screen** and enabling **Background rest alerts** in Settings. Live-ticking lock-screen widgets (Live Activities) are native-only on iOS and not available to web PWAs.
+- **Android / Desktop:** Web Push delivers completion alerts when backgrounded or locked. The **Keep screen awake** toggle in Settings uses the Screen Wake Lock API while an active workout is open.
+
 If you're reading this README on GitHub and want to use this template, run:
 
 ```
