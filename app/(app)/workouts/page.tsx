@@ -47,15 +47,16 @@ export default function WorkoutsPage() {
   const [templatePickerOpen, setTemplatePickerOpen] = useState(false);
   const [launchingTarget, setLaunchingTarget] = useState<string | null>(null);
   const [launchError, setLaunchError] = useState<string | null>(null);
-  const [activeConflictTitle, setActiveConflictTitle] = useState<string | null>(
-    null,
-  );
+  const [activeConflict, setActiveConflict] = useState<{
+    readonly workoutId: Id<"workouts">;
+    readonly title: string;
+  } | null>(null);
 
   const settings = appShellState?.settings ?? null;
   const activeWorkout = appShellState?.activeWorkout ?? null;
   const launching = launchingTarget !== null;
   const showActiveConflict =
-    activeConflictTitle !== null &&
+    activeConflict !== null &&
     (appShellState === undefined || activeWorkout !== null);
 
   async function handleStartFreestyle() {
@@ -65,14 +66,14 @@ export default function WorkoutsPage() {
 
     setLaunchingTarget("freestyle");
     setLaunchError(null);
-    setActiveConflictTitle(null);
+    setActiveConflict(null);
     try {
       const result = await startWorkout({});
       if (result.kind === "started") {
-        router.push("/workouts/active");
+        router.push(`/workouts/${result.workoutId}`);
         return;
       }
-      setActiveConflictTitle(result.title);
+      setActiveConflict({ workoutId: result.workoutId, title: result.title });
       setLaunchingTarget(null);
     } catch (err) {
       setLaunchError(
@@ -92,16 +93,16 @@ export default function WorkoutsPage() {
 
     setLaunchingTarget(templateId);
     setLaunchError(null);
-    setActiveConflictTitle(null);
+    setActiveConflict(null);
     try {
       const result = await startWorkout({ templateId });
       if (result.kind === "started") {
         setTemplatePickerOpen(false);
-        router.push("/workouts/active");
+        router.push(`/workouts/${result.workoutId}`);
         return;
       }
       setTemplatePickerOpen(false);
-      setActiveConflictTitle(result.title);
+      setActiveConflict({ workoutId: result.workoutId, title: result.title });
       setLaunchingTarget(null);
     } catch (err) {
       setLaunchError(
@@ -175,21 +176,25 @@ export default function WorkoutsPage() {
             </div>
 
             <Button asChild className="self-start sm:self-auto">
-              <Link href="/workouts/active">Resume workout</Link>
+              <Link href={`/workouts/${activeWorkout._id}`}>
+                Resume workout
+              </Link>
             </Button>
           </section>
         </Card>
       )}
 
-      {showActiveConflict && (
+      {showActiveConflict && activeConflict !== null && (
         <Alert>
           <AlertDescription className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <span>
-              You already have an active workout ({activeConflictTitle}). Resume
-              or discard it before starting a new session.
+              You already have an active workout ({activeConflict.title}).
+              Resume or discard it before starting a new session.
             </span>
             <Button asChild size="sm" className="self-start sm:self-auto">
-              <Link href="/workouts/active">Resume workout</Link>
+              <Link href={`/workouts/${activeConflict.workoutId}`}>
+                Resume workout
+              </Link>
             </Button>
           </AlertDescription>
         </Alert>
@@ -260,7 +265,7 @@ export default function WorkoutsPage() {
               disabled={launching || templates === undefined}
               onClick={() => {
                 setLaunchError(null);
-                setActiveConflictTitle(null);
+                setActiveConflict(null);
                 setTemplatePickerOpen(true);
               }}
               className="w-full"

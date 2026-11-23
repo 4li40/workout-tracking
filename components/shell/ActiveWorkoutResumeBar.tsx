@@ -1,10 +1,19 @@
 "use client";
 
+import { Timer } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { formatElapsedDuration } from "@/convex/lib/settings";
 import type { ActiveWorkoutSummary } from "./appShellState";
+
+function formatRestClock(remainingMs: number): string {
+  const totalSeconds = Math.max(0, Math.ceil(remainingMs / 1000));
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+}
 
 export function ActiveWorkoutResumeBar({
   activeWorkout,
@@ -23,6 +32,10 @@ export function ActiveWorkoutResumeBar({
   }, []);
 
   const elapsed = formatElapsedDuration(now - activeWorkout.startedAt);
+  const restRemainingMs =
+    activeWorkout.restTimerEndsAt !== undefined
+      ? activeWorkout.restTimerEndsAt - now
+      : 0;
 
   return (
     <aside
@@ -36,12 +49,18 @@ export function ActiveWorkoutResumeBar({
             aria-hidden="true"
           />
           <div className="min-w-0">
-            <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+            <div className="flex flex-wrap items-center gap-2 text-xs font-medium text-muted-foreground">
               <span>Active workout</span>
               <span aria-hidden="true">&middot;</span>
               <span className="font-semibold text-primary tabular-nums">
                 {elapsed}
               </span>
+              {restRemainingMs > 0 && (
+                <Badge variant="accent" className="gap-1 py-0 tabular-nums">
+                  <Timer className="size-3" aria-hidden="true" />
+                  <span>{formatRestClock(restRemainingMs)}</span>
+                </Badge>
+              )}
             </div>
             <p className="truncate text-sm font-semibold text-foreground">
               {activeWorkout.title}
@@ -50,7 +69,7 @@ export function ActiveWorkoutResumeBar({
         </div>
 
         <Button asChild className="shrink-0">
-          <Link href="/workouts/active">Resume</Link>
+          <Link href={`/workouts/${activeWorkout._id}`}>Resume</Link>
         </Button>
       </div>
     </aside>

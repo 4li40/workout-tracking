@@ -14,8 +14,8 @@ import {
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { type FormEvent, useEffect, useId, useRef, useState } from "react";
+import { ExercisePickerDialog } from "@/components/exercises/ExercisePickerDialog";
 import { DeleteTemplateDialog } from "@/components/templates/DeleteTemplateDialog";
-import { ExercisePickerDialog } from "@/components/templates/ExercisePickerDialog";
 import { TemplateExerciseRow } from "@/components/templates/TemplateExerciseRow";
 import { TemplateRouteErrorBoundary } from "@/components/templates/TemplateRouteErrorBoundary";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -50,6 +50,7 @@ function TemplateDetailContent({
 
   const updateTitle = useMutation(api.templates.updateTitle);
   const duplicateTemplate = useMutation(api.templates.duplicate);
+  const addTemplateExercise = useMutation(api.templates.addExercise);
   const reorderExercises = useMutation(api.templates.reorderExercises);
   const removeExercise = useMutation(api.templates.removeExercise);
   const startWorkout = useMutation(api.workouts.startWorkout);
@@ -70,9 +71,10 @@ function TemplateDetailContent({
   const [duplicating, setDuplicating] = useState(false);
   const [starting, setStarting] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
-  const [activeConflictTitle, setActiveConflictTitle] = useState<string | null>(
-    null,
-  );
+  const [activeConflict, setActiveConflict] = useState<{
+    readonly workoutId: Id<"workouts">;
+    readonly title: string;
+  } | null>(null);
 
   const titleSavedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const titleInputId = useId();
@@ -251,14 +253,14 @@ function TemplateDetailContent({
 
     setStarting(true);
     setActionError(null);
-    setActiveConflictTitle(null);
+    setActiveConflict(null);
     try {
       const result = await startWorkout({ templateId: loadedTemplate._id });
       if (result.kind === "started") {
-        router.push("/workouts/active");
+        router.push(`/workouts/${result.workoutId}`);
         return;
       }
-      setActiveConflictTitle(result.title);
+      setActiveConflict({ workoutId: result.workoutId, title: result.title });
       setStarting(false);
     } catch (err) {
       setActionError(
@@ -370,15 +372,17 @@ function TemplateDetailContent({
         </div>
       </div>
 
-      {activeConflictTitle !== null && (
+      {activeConflict !== null && (
         <Alert>
           <AlertDescription className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <span>
-              You already have an active workout ({activeConflictTitle}). Resume
-              or discard it before starting another.
+              You already have an active workout ({activeConflict.title}).
+              Resume or discard it before starting another.
             </span>
             <Button asChild size="sm" className="self-start sm:self-auto">
-              <Link href="/workouts/active">Resume workout</Link>
+              <Link href={`/workouts/${activeConflict.workoutId}`}>
+                Resume workout
+              </Link>
             </Button>
           </AlertDescription>
         </Alert>
@@ -531,8 +535,21 @@ function TemplateDetailContent({
       <ExercisePickerDialog
         open={pickerOpen}
         onOpenChange={setPickerOpen}
-        templateId={loadedTemplate._id}
+        mode="multi"
+        resetKey={loadedTemplate._id}
+        title="Add exercises"
+        description="Tap Add on as many exercises as you need for this routine."
+        actionLabel="Add"
+        busyActionLabel="Adding..."
+        existingLabel="In routine"
         existingExerciseIds={existingExerciseIds}
+        onSelectExercise={async (exerciseId) => {
+          await addTemplateExercise({
+            templateId: loadedTemplate._id,
+            exerciseId,
+          });
+        }}
+        errorFallback="Could not add exercise to routine. Please try again."
       />
 
       <DeleteTemplateDialog
