@@ -159,7 +159,7 @@ export function validateCompletedSet(input: {
       message: "Enter at least 1 rep before checking off a set.",
     };
   }
-  if (!input.isBodyweight && input.weightKg <= 0) {
+  if (!input.isBodyweight && input.weightKg <= WEIGHT_EPSILON_KG) {
     return {
       kind: "error",
       message: "Enter a weight above 0 before checking off this set.",
@@ -249,13 +249,16 @@ export function parseWeightInputString(
   if (trimmed === "") {
     return { kind: "ok", weightKg: 0 };
   }
-  if (!/^(?:\d+\.?\d*|\.\d+)$/.test(trimmed)) {
+  const normalized = trimmed.includes(".")
+    ? trimmed
+    : trimmed.replace(",", ".");
+  if (!/^(?:\d+\.?\d*|\.\d+)$/.test(normalized)) {
     return {
       kind: "error",
       message: "Enter a valid weight.",
     };
   }
-  const displayWeight = Number(trimmed);
+  const displayWeight = Number(normalized);
   if (!Number.isFinite(displayWeight) || displayWeight < 0) {
     return {
       kind: "error",
@@ -263,6 +266,16 @@ export function parseWeightInputString(
     };
   }
   const weightKg = displayWeightToKg(displayWeight, unit);
+  if (weightKg > MAX_WEIGHT_KG) {
+    const maxDisplayWeight =
+      unit === "kg"
+        ? MAX_WEIGHT_KG
+        : Math.floor((MAX_WEIGHT_KG / KG_PER_LB) * 100) / 100;
+    return {
+      kind: "error",
+      message: `Weight must be ${formatWeightNumber(maxDisplayWeight)} ${unit} or less.`,
+    };
+  }
   return parseSetWeightKg(weightKg);
 }
 

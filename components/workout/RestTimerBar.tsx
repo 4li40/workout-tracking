@@ -13,6 +13,9 @@ import { Button } from "@/components/ui/button";
 import { formatRestDuration } from "@/convex/lib/settings";
 import { REST_ADJUST_STEP_SECONDS } from "@/convex/lib/workouts";
 import {
+  getEstimatedServerNowMs,
+  hasAlertedRestTimer,
+  markRestTimerAlerted,
   primeRestTimerAudio,
   readRestSoundEnabled,
   triggerRestTimerCompletionCue,
@@ -51,7 +54,7 @@ export function RestTimerBar({
     readonly nowMs: number;
   }>(() => ({
     forEndsAt: restTimerEndsAt,
-    nowMs: Date.now(),
+    nowMs: getEstimatedServerNowMs(),
   }));
   const [soundEnabled, setSoundEnabled] = useState(() =>
     readRestSoundEnabled(),
@@ -60,7 +63,6 @@ export function RestTimerBar({
     number | null
   >(null);
 
-  const lastAlertedEndsAtRef = useRef<number | null>(null);
   const soundEnabledRef = useRef(soundEnabled);
 
   useEffect(() => {
@@ -70,21 +72,37 @@ export function RestTimerBar({
   useEffect(() => {
     if (restTimerEndsAt === undefined) {
       const clearId = window.setTimeout(() => {
-        setClock({ forEndsAt: undefined, nowMs: Date.now() });
+        setClock({ forEndsAt: undefined, nowMs: getEstimatedServerNowMs() });
+        setCompletedAlertEndsAt(null);
       }, 0);
       return () => {
         window.clearTimeout(clearId);
       };
     }
 
+    let intervalId: number | null = null;
+    const stopInterval = () => {
+      if (intervalId !== null) {
+        window.clearInterval(intervalId);
+        intervalId = null;
+      }
+    };
+
     const syncClock = () => {
-      const currentNow = Date.now();
+      const currentNow = getEstimatedServerNowMs();
       setClock({ forEndsAt: restTimerEndsAt, nowMs: currentNow });
-      if (
-        currentNow >= restTimerEndsAt &&
-        lastAlertedEndsAtRef.current !== restTimerEndsAt
-      ) {
-        lastAlertedEndsAtRef.current = restTimerEndsAt;
+      if (currentNow < restTimerEndsAt) {
+        if (intervalId === null) {
+          intervalId = window.setInterval(syncClock, 250);
+        }
+        setCompletedAlertEndsAt((previous) =>
+          previous !== null && previous !== restTimerEndsAt ? null : previous,
+        );
+        return;
+      }
+      stopInterval();
+      if (!hasAlertedRestTimer(restTimerEndsAt)) {
+        markRestTimerAlerted(restTimerEndsAt);
         if (currentNow - restTimerEndsAt <= RECENT_EXPIRY_WINDOW_MS) {
           triggerRestTimerCompletionCue(soundEnabledRef.current);
           setCompletedAlertEndsAt(restTimerEndsAt);
@@ -93,14 +111,13 @@ export function RestTimerBar({
     };
 
     const initialTickId = window.setTimeout(syncClock, 0);
-    const intervalId = window.setInterval(syncClock, 250);
-    window.addEventListener("visibilitychange", syncClock);
+    document.addEventListener("visibilitychange", syncClock);
     window.addEventListener("focus", syncClock);
 
     return () => {
       window.clearTimeout(initialTickId);
-      window.clearInterval(intervalId);
-      window.removeEventListener("visibilitychange", syncClock);
+      stopInterval();
+      document.removeEventListener("visibilitychange", syncClock);
       window.removeEventListener("focus", syncClock);
     };
   }, [restTimerEndsAt]);
@@ -129,7 +146,7 @@ export function RestTimerBar({
   const showCompletedBanner =
     !isRunning &&
     completedAlertEndsAt !== null &&
-    (restTimerEndsAt === undefined || restTimerEndsAt === completedAlertEndsAt);
+    restTimerEndsAt === completedAlertEndsAt;
 
   if (!isRunning && !showCompletedBanner) {
     return null;
@@ -267,6 +284,7 @@ export function RestTimerBar({
               disabled={busy}
               onClick={() => {
                 primeRestTimerAudio();
+                setCompletedAlertEndsAt(null);
                 onAdjust(-REST_ADJUST_STEP_SECONDS);
               }}
               className="tabular-nums"

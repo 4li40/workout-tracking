@@ -57,7 +57,9 @@ export default function WorkoutsPage() {
   const launching = launchingTarget !== null;
   const showActiveConflict =
     activeConflict !== null &&
-    (appShellState === undefined || activeWorkout !== null);
+    (appShellState === undefined ||
+      (activeWorkout !== null &&
+        activeWorkout._id === activeConflict.workoutId));
 
   async function handleStartFreestyle() {
     if (launching) {

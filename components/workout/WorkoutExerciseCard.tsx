@@ -54,6 +54,7 @@ interface WorkoutExerciseCardProps {
   readonly activeSetId: Id<"sets"> | null;
   readonly recoveredSetDrafts: Readonly<Record<string, LocalSetDraft>>;
   readonly listBusy: boolean;
+  readonly removing: boolean;
   readonly addingSet: boolean;
   readonly deletingSetId: Id<"sets"> | null;
   readonly onActivateSet: (setId: Id<"sets">) => void;
@@ -79,6 +80,7 @@ export function WorkoutExerciseCard({
   activeSetId,
   recoveredSetDrafts,
   listBusy,
+  removing,
   addingSet,
   deletingSetId,
   onActivateSet,
@@ -107,7 +109,6 @@ export function WorkoutExerciseCard({
   const [noteError, setNoteError] = useState<string | null>(null);
 
   const [confirmRemoveOpen, setConfirmRemoveOpen] = useState(false);
-  const [removing, setRemoving] = useState(false);
   const [removeError, setRemoveError] = useState<string | null>(null);
 
   const effectiveSets = exercise.sets.map((set) => {
@@ -196,10 +197,9 @@ export function WorkoutExerciseCard({
   }
 
   async function handleRemove() {
-    if (removing) {
+    if (removing || listBusy) {
       return;
     }
-    setRemoving(true);
     setRemoveError(null);
     try {
       await onRemoveExercise();
@@ -207,7 +207,6 @@ export function WorkoutExerciseCard({
       setRemoveError(
         getConvexErrorMessage(err, "Could not remove exercise from workout."),
       );
-      setRemoving(false);
     }
   }
 
@@ -266,11 +265,14 @@ export function WorkoutExerciseCard({
               type="button"
               size="icon"
               variant={hasSavedNote || noteEditorOpen ? "secondary" : "outline"}
-              disabled={cardBusy}
+              disabled={cardBusy || noteSaving}
               aria-label={`Sticky note for ${exercise.exerciseName}`}
               onClick={() => {
                 setNoteError(null);
-                setNoteEditorOpen((open) => !open);
+                if (noteEditorOpen) {
+                  setNoteDraft(null);
+                }
+                setNoteEditorOpen(!noteEditorOpen);
               }}
             >
               <StickyNote

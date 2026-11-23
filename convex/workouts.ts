@@ -829,7 +829,24 @@ export const swapWorkoutExercise = mutation({
     ).filter((row) => row.userId === userId);
 
     if (existingSets.length === 0) {
-      const defaults = await resolveUserDefaults(ctx, userId);
+      const [workoutSets, defaults] = await Promise.all([
+        ctx.db
+          .query("sets")
+          .withIndex("by_workout", (q) =>
+            q.eq("workoutId", workoutExercise.workoutId),
+          )
+          .take(MAX_WORKOUT_SETS),
+        resolveUserDefaults(ctx, userId),
+      ]);
+      const ownedWorkoutSetCount = workoutSets.filter(
+        (row) => row.userId === userId,
+      ).length;
+      if (ownedWorkoutSetCount >= MAX_WORKOUT_SETS) {
+        throw new ConvexError({
+          code: "CONFLICT",
+          message: `A workout can contain up to ${MAX_WORKOUT_SETS} sets.`,
+        });
+      }
       await ctx.db.insert("sets", {
         userId,
         workoutId: workoutExercise.workoutId,
@@ -951,6 +968,7 @@ export const upsertSet = mutation({
   returns: v.object({
     setId: v.id("sets"),
     restTimerEndsAt: v.optional(v.number()),
+    serverNow: v.number(),
   }),
   handler: async (ctx, args) => {
     const userId = await requireAuthUserId(ctx);
@@ -1104,6 +1122,7 @@ export const upsertSet = mutation({
       return {
         setId,
         restTimerEndsAt: nextRestTimerEndsAt,
+        serverNow: now,
       };
     }
 
@@ -1112,6 +1131,7 @@ export const upsertSet = mutation({
       ...(workout.restTimerEndsAt !== undefined
         ? { restTimerEndsAt: workout.restTimerEndsAt }
         : {}),
+      serverNow: now,
     };
   },
 });
@@ -1165,7 +1185,10 @@ export const updateRestTimer = mutation({
       }),
     ),
   },
-  returns: v.union(v.number(), v.null()),
+  returns: v.object({
+    restTimerEndsAt: v.union(v.number(), v.null()),
+    serverNow: v.number(),
+  }),
   handler: async (ctx, args) => {
     const userId = await requireAuthUserId(ctx);
     const workout = await requireActiveOwnedWorkout(
@@ -1188,7 +1211,7 @@ export const updateRestTimer = mutation({
         await ctx.db.patch("workouts", workout._id, {
           restTimerEndsAt: nextEndsAt,
         });
-        return nextEndsAt;
+        return { restTimerEndsAt: nextEndsAt, serverNow: now };
       }
 
       case "adjust": {
@@ -1205,7 +1228,7 @@ export const updateRestTimer = mutation({
           await ctx.db.patch("workouts", workout._id, {
             restTimerEndsAt: undefined,
           });
-          return null;
+          return { restTimerEndsAt: null, serverNow: now };
         }
         const clampedEndsAt = Math.min(
           nextEndsAt,
@@ -1214,14 +1237,14 @@ export const updateRestTimer = mutation({
         await ctx.db.patch("workouts", workout._id, {
           restTimerEndsAt: clampedEndsAt,
         });
-        return clampedEndsAt;
+        return { restTimerEndsAt: clampedEndsAt, serverNow: now };
       }
 
       case "skip": {
         await ctx.db.patch("workouts", workout._id, {
           restTimerEndsAt: undefined,
         });
-        return null;
+        return { restTimerEndsAt: null, serverNow: now };
       }
 
       default: {

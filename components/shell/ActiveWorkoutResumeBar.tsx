@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { formatElapsedDuration } from "@/convex/lib/settings";
+import { getEstimatedServerNowMs } from "@/lib/restTimerCue";
 import type { ActiveWorkoutSummary } from "./appShellState";
 
 function formatRestClock(remainingMs: number): string {
@@ -20,14 +21,19 @@ export function ActiveWorkoutResumeBar({
 }: Readonly<{
   activeWorkout: ActiveWorkoutSummary;
 }>) {
-  const [now, setNow] = useState(() => Date.now());
+  const [now, setNow] = useState(() => getEstimatedServerNowMs());
 
   useEffect(() => {
-    const intervalId = window.setInterval(() => {
-      setNow(Date.now());
-    }, 1000);
+    const syncNow = () => {
+      setNow(getEstimatedServerNowMs());
+    };
+    const intervalId = window.setInterval(syncNow, 1000);
+    document.addEventListener("visibilitychange", syncNow);
+    window.addEventListener("focus", syncNow);
     return () => {
       window.clearInterval(intervalId);
+      document.removeEventListener("visibilitychange", syncNow);
+      window.removeEventListener("focus", syncNow);
     };
   }, []);
 
