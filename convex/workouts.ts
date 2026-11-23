@@ -18,10 +18,12 @@ import {
   MAX_REST_SECONDS,
   parseRestSeconds,
 } from "./lib/settings";
+import { recomputeExerciseRecords } from "./lib/records";
 import { MAX_TEMPLATE_EXERCISES, validatePermutation } from "./lib/templates";
 import {
   equipmentValidator,
   muscleGroupValidator,
+  prTypeValidator,
   setTypeValidator,
   weightUnitValidator,
   workoutStatusValidator,
@@ -93,6 +95,7 @@ const workoutExerciseDetailValidator = v.object({
   stickyNote: v.optional(v.string()),
   orderIndex: v.number(),
   restSeconds: v.number(),
+  prTypes: v.array(prTypeValidator),
   sets: v.array(workoutSetDetailValidator),
   previousSets: v.array(previousSetValidator),
 });
@@ -122,6 +125,7 @@ const workoutDetailValidator = v.object({
   notes: v.optional(v.string()),
   restTimerEndsAt: v.optional(v.number()),
   exercises: v.array(workoutExerciseDetailValidator),
+  totalPrCount: v.number(),
   sourceTemplate: v.union(workoutSourceTemplateValidator, v.null()),
 });
 
@@ -469,6 +473,7 @@ export const get = query({
         ...(stickyNote !== undefined ? { stickyNote } : {}),
         orderIndex: row.orderIndex,
         restSeconds: row.restSeconds,
+        prTypes: row.prTypes ?? [],
         sets: rowSets.map((setDoc) => ({
           _id: setDoc._id,
           setNumber: setDoc.setNumber,
@@ -517,6 +522,11 @@ export const get = query({
       }
     }
 
+    const totalPrCount = exercises.reduce(
+      (sum, item) => sum + item.prTypes.length,
+      0,
+    );
+
     return {
       _id: workout._id,
       title: workout.title,
@@ -533,6 +543,7 @@ export const get = query({
         ? { restTimerEndsAt: workout.restTimerEndsAt }
         : {}),
       exercises,
+      totalPrCount,
       sourceTemplate,
     };
   },
@@ -1255,6 +1266,40 @@ export const updateRestTimer = mutation({
   },
 });
 
+async function refreshTemplateLastPerformedAt(
+  ctx: MutationCtx,
+  userId: Id<"users">,
+  templateId: Id<"workoutTemplates">,
+): Promise<void> {
+  const template = await ctx.db.get("workoutTemplates", templateId);
+  if (template === null || template.userId !== userId) {
+    return;
+  }
+
+  let latestFinishedAt: number | undefined;
+  for await (const workout of ctx.db
+    .query("workouts")
+    .withIndex("by_user_finishedAt", (q) =>
+      q.eq("userId", userId).gt("finishedAt", 0),
+    )
+    .order("desc")) {
+    if (
+      workout.status === "completed" &&
+      workout.templateId === template._id &&
+      workout.finishedAt !== undefined
+    ) {
+      latestFinishedAt = workout.finishedAt;
+      break;
+    }
+  }
+
+  if (template.lastPerformedAt !== latestFinishedAt) {
+    await ctx.db.patch("workoutTemplates", template._id, {
+      lastPerformedAt: latestFinishedAt,
+    });
+  }
+}
+
 export const finishWorkout = mutation({
   args: {
     workoutId: v.id("workouts"),
@@ -1267,6 +1312,13 @@ export const finishWorkout = mutation({
     finishedAt: v.number(),
     completedSetsCount: v.number(),
     templateUpdated: v.boolean(),
+    prCount: v.number(),
+    achievedPrs: v.array(
+      v.object({
+        exerciseId: v.id("exercises"),
+        prTypes: v.array(prTypeValidator),
+      }),
+    ),
   }),
   handler: async (ctx, args) => {
     const userId = await requireAuthUserId(ctx);
@@ -1353,7 +1405,7 @@ export const finishWorkout = mutation({
       });
     }
 
-    const finishedAt = Date.now();
+    const finishedAt = Math.max(workout.startedAt, Date.now());
     let templateUpdated = false;
     let ownedTemplate: Doc<"workoutTemplates"> | null = null;
 
@@ -1431,6 +1483,7 @@ export const finishWorkout = mutation({
     }
 
     let keptOrderIndex = 0;
+    const affectedExerciseIds: Id<"exercises">[] = [];
     for (const row of ownedExercises) {
       const completedList = completedSetsByExercise.get(row._id) ?? [];
       if (completedList.length === 0) {
@@ -1458,6 +1511,7 @@ export const finishWorkout = mutation({
         completedAt: finishedAt,
         orderIndex: keptOrderIndex,
       });
+      affectedExerciseIds.push(row.exerciseId);
       keptOrderIndex += 1;
     }
 
@@ -1475,12 +1529,358 @@ export const finishWorkout = mutation({
       });
     }
 
+    const prMapByExercise = await recomputeExerciseRecords(
+      ctx,
+      userId,
+      affectedExerciseIds,
+    );
+
+    const achievedPrs = [];
+    let prCount = 0;
+    const seenExerciseIds = new Set<Id<"exercises">>();
+    for (const exerciseId of affectedExerciseIds) {
+      if (seenExerciseIds.has(exerciseId)) {
+        continue;
+      }
+      seenExerciseIds.add(exerciseId);
+      const prTypes = prMapByExercise.get(exerciseId)?.get(workout._id) ?? [];
+      if (prTypes.length > 0) {
+        achievedPrs.push({
+          exerciseId,
+          prTypes: [...prTypes],
+        });
+        prCount += prTypes.length;
+      }
+    }
+
     return {
       workoutId: workout._id,
       finishedAt,
       completedSetsCount,
       templateUpdated,
+      prCount,
+      achievedPrs,
     };
+  },
+});
+
+export const updateCompletedWorkout = mutation({
+  args: {
+    workoutId: v.id("workouts"),
+    title: v.string(),
+    notes: v.optional(v.string()),
+    startedAt: v.number(),
+    finishedAt: v.number(),
+    exercises: v.array(
+      v.object({
+        exerciseId: v.id("exercises"),
+        restSeconds: v.number(),
+        sets: v.array(
+          v.object({
+            setType: setTypeValidator,
+            weightKg: v.number(),
+            enteredUnit: weightUnitValidator,
+            reps: v.number(),
+          }),
+        ),
+      }),
+    ),
+  },
+  returns: v.object({
+    workoutId: v.id("workouts"),
+    finishedAt: v.number(),
+    completedSetsCount: v.number(),
+    prCount: v.number(),
+  }),
+  handler: async (ctx, args) => {
+    const userId = await requireAuthUserId(ctx);
+    const workout = await requireOwnedById(
+      ctx,
+      "workouts",
+      args.workoutId,
+      userId,
+    );
+
+    if (workout.status !== "completed") {
+      throw new ConvexError({
+        code: "CONFLICT",
+        message: "Only a completed workout can be edited.",
+      });
+    }
+
+    const parsedTitle = parseWorkoutTitle(args.title);
+    if (parsedTitle.kind === "error") {
+      throw new ConvexError({
+        code: "INVALID_ARGUMENT",
+        message: parsedTitle.message,
+      });
+    }
+
+    const parsedNotes = parseWorkoutNotes(args.notes);
+    if (parsedNotes.kind === "error") {
+      throw new ConvexError({
+        code: "INVALID_ARGUMENT",
+        message: parsedNotes.message,
+      });
+    }
+
+    if (
+      !Number.isFinite(args.startedAt) ||
+      !Number.isFinite(args.finishedAt) ||
+      args.startedAt <= 0 ||
+      args.finishedAt < args.startedAt
+    ) {
+      throw new ConvexError({
+        code: "INVALID_ARGUMENT",
+        message: "Workout start and finish times must be valid.",
+      });
+    }
+
+    if (args.exercises.length === 0) {
+      throw new ConvexError({
+        code: "INVALID_ARGUMENT",
+        message: "A completed workout must include at least one exercise.",
+      });
+    }
+
+    if (args.exercises.length > MAX_WORKOUT_EXERCISES) {
+      throw new ConvexError({
+        code: "CONFLICT",
+        message: `A workout can contain up to ${MAX_WORKOUT_EXERCISES} exercises.`,
+      });
+    }
+
+    const readableExercises = new Map<Id<"exercises">, Doc<"exercises">>();
+    const validatedExercises: Array<{
+      exerciseId: Id<"exercises">;
+      restSeconds: number;
+      sets: Array<{
+        setType: Doc<"sets">["setType"];
+        weightKg: number;
+        enteredUnit: Doc<"sets">["enteredUnit"];
+        reps: number;
+      }>;
+    }> = [];
+    let completedSetsCount = 0;
+
+    for (const exerciseEntry of args.exercises) {
+      if (exerciseEntry.sets.length === 0) {
+        throw new ConvexError({
+          code: "INVALID_ARGUMENT",
+          message: "Each exercise must include at least one completed set.",
+        });
+      }
+
+      if (exerciseEntry.sets.length > MAX_SETS_PER_EXERCISE) {
+        throw new ConvexError({
+          code: "CONFLICT",
+          message: `An exercise can have up to ${MAX_SETS_PER_EXERCISE} sets.`,
+        });
+      }
+
+      completedSetsCount += exerciseEntry.sets.length;
+      if (completedSetsCount > MAX_WORKOUT_SETS) {
+        throw new ConvexError({
+          code: "CONFLICT",
+          message: `A workout can contain up to ${MAX_WORKOUT_SETS} sets.`,
+        });
+      }
+
+      const parsedRest = parseRestSeconds(exerciseEntry.restSeconds);
+      if (parsedRest.kind === "error") {
+        throw new ConvexError({
+          code: "INVALID_ARGUMENT",
+          message: parsedRest.message,
+        });
+      }
+
+      let exerciseDoc = readableExercises.get(exerciseEntry.exerciseId);
+      if (exerciseDoc === undefined) {
+        exerciseDoc = await requireReadableExercise(
+          ctx,
+          exerciseEntry.exerciseId,
+          userId,
+        );
+        readableExercises.set(exerciseEntry.exerciseId, exerciseDoc);
+      }
+
+      const validatedSets = [];
+      for (const setEntry of exerciseEntry.sets) {
+        const parsedWeight = parseSetWeightKg(setEntry.weightKg);
+        if (parsedWeight.kind === "error") {
+          throw new ConvexError({
+            code: "INVALID_ARGUMENT",
+            message: parsedWeight.message,
+          });
+        }
+
+        const parsedReps = parseSetReps(setEntry.reps);
+        if (parsedReps.kind === "error") {
+          throw new ConvexError({
+            code: "INVALID_ARGUMENT",
+            message: parsedReps.message,
+          });
+        }
+
+        const completedCheck = validateCompletedSet({
+          weightKg: parsedWeight.weightKg,
+          reps: parsedReps.reps,
+          isBodyweight: exerciseDoc.isBodyweight,
+        });
+        if (completedCheck.kind === "error") {
+          throw new ConvexError({
+            code: "INVALID_ARGUMENT",
+            message: completedCheck.message,
+          });
+        }
+
+        validatedSets.push({
+          setType: setEntry.setType,
+          weightKg: parsedWeight.weightKg,
+          enteredUnit: setEntry.enteredUnit,
+          reps: parsedReps.reps,
+        });
+      }
+
+      validatedExercises.push({
+        exerciseId: exerciseEntry.exerciseId,
+        restSeconds: parsedRest.seconds,
+        sets: validatedSets,
+      });
+    }
+
+    const affectedExerciseIds = new Set<Id<"exercises">>();
+
+    for await (const setDoc of ctx.db
+      .query("sets")
+      .withIndex("by_workout", (q) => q.eq("workoutId", workout._id))) {
+      if (setDoc.userId === userId) {
+        affectedExerciseIds.add(setDoc.exerciseId);
+        await ctx.db.delete("sets", setDoc._id);
+      }
+    }
+
+    for await (const row of ctx.db
+      .query("workoutExercises")
+      .withIndex("by_workout_order", (q) => q.eq("workoutId", workout._id))) {
+      if (row.userId === userId) {
+        affectedExerciseIds.add(row.exerciseId);
+        await ctx.db.delete("workoutExercises", row._id);
+      }
+    }
+
+    const newExerciseIds = new Set<Id<"exercises">>();
+    for (const [orderIndex, exerciseEntry] of validatedExercises.entries()) {
+      affectedExerciseIds.add(exerciseEntry.exerciseId);
+      newExerciseIds.add(exerciseEntry.exerciseId);
+
+      const workoutExerciseId = await ctx.db.insert("workoutExercises", {
+        userId,
+        workoutId: workout._id,
+        exerciseId: exerciseEntry.exerciseId,
+        orderIndex,
+        restSeconds: exerciseEntry.restSeconds,
+        workoutStatus: "completed",
+        completedAt: args.finishedAt,
+      });
+
+      for (const [setIndex, setEntry] of exerciseEntry.sets.entries()) {
+        await ctx.db.insert("sets", {
+          userId,
+          workoutId: workout._id,
+          workoutExerciseId,
+          exerciseId: exerciseEntry.exerciseId,
+          setNumber: setIndex + 1,
+          setType: setEntry.setType,
+          weightKg: setEntry.weightKg,
+          enteredUnit: setEntry.enteredUnit,
+          reps: setEntry.reps,
+          completed: true,
+          completedAt: args.finishedAt,
+        });
+      }
+    }
+
+    await ctx.db.patch("workouts", workout._id, {
+      title: parsedTitle.title,
+      notes: parsedNotes.notes,
+      startedAt: args.startedAt,
+      finishedAt: args.finishedAt,
+    });
+
+    if (workout.templateId !== undefined) {
+      await refreshTemplateLastPerformedAt(ctx, userId, workout.templateId);
+    }
+
+    const prMapByExercise = await recomputeExerciseRecords(
+      ctx,
+      userId,
+      affectedExerciseIds,
+    );
+
+    let prCount = 0;
+    for (const exerciseId of newExerciseIds) {
+      prCount += prMapByExercise.get(exerciseId)?.get(workout._id)?.length ?? 0;
+    }
+
+    return {
+      workoutId: workout._id,
+      finishedAt: args.finishedAt,
+      completedSetsCount,
+      prCount,
+    };
+  },
+});
+
+export const deleteCompletedWorkout = mutation({
+  args: {
+    workoutId: v.id("workouts"),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const userId = await requireAuthUserId(ctx);
+    const workout = await requireOwnedById(
+      ctx,
+      "workouts",
+      args.workoutId,
+      userId,
+    );
+
+    if (workout.status !== "completed") {
+      throw new ConvexError({
+        code: "CONFLICT",
+        message: "Only a completed workout can be deleted.",
+      });
+    }
+
+    const affectedExerciseIds = new Set<Id<"exercises">>();
+
+    for await (const setDoc of ctx.db
+      .query("sets")
+      .withIndex("by_workout", (q) => q.eq("workoutId", workout._id))) {
+      if (setDoc.userId === userId) {
+        affectedExerciseIds.add(setDoc.exerciseId);
+        await ctx.db.delete("sets", setDoc._id);
+      }
+    }
+
+    for await (const row of ctx.db
+      .query("workoutExercises")
+      .withIndex("by_workout_order", (q) => q.eq("workoutId", workout._id))) {
+      if (row.userId === userId) {
+        affectedExerciseIds.add(row.exerciseId);
+        await ctx.db.delete("workoutExercises", row._id);
+      }
+    }
+
+    await ctx.db.delete("workouts", workout._id);
+
+    if (workout.templateId !== undefined) {
+      await refreshTemplateLastPerformedAt(ctx, userId, workout.templateId);
+    }
+
+    await recomputeExerciseRecords(ctx, userId, affectedExerciseIds);
+    return null;
   },
 });
 
