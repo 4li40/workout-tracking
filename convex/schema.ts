@@ -3,6 +3,7 @@ import { v } from "convex/values";
 import {
   equipmentValidator,
   muscleGroupValidator,
+  prTypeValidator,
   setTypeValidator,
   weightUnitValidator,
   workoutStatusValidator,
@@ -76,6 +77,7 @@ export default defineSchema({
     restSeconds: v.number(),
     workoutStatus: workoutStatusValidator,
     completedAt: v.optional(v.number()),
+    prTypes: v.optional(v.array(prTypeValidator)),
   })
     .index("by_workout_order", ["workoutId", "orderIndex"])
     .index("by_user_exercise_completedAt", [

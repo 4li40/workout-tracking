@@ -48,3 +48,12 @@ export const setTypeValidator = v.union(
   v.literal("failure"),
 );
 export type SetType = Infer<typeof setTypeValidator>;
+
+export const prTypeValidator = v.union(
+  v.literal("weight"),
+  v.literal("e1rm"),
+  v.literal("bodyweight_reps"),
+  v.literal("session_volume"),
+  v.literal("bodyweight_session_reps"),
+);
+export type PrType = Infer<typeof prTypeValidator>;

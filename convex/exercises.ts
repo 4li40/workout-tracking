@@ -14,6 +14,7 @@ import {
   parseExerciseNote,
   USER_NOTES_LIST_LIMIT,
 } from "./lib/exercises";
+import { recomputeExerciseRecords } from "./lib/records";
 import { equipmentValidator, muscleGroupValidator } from "./lib/validators";
 
 const exerciseListItemValidator = v.object({
@@ -139,7 +140,11 @@ export const update = mutation({
   returns: v.null(),
   handler: async (ctx, args) => {
     const userId = await requireAuthUserId(ctx);
-    await requireEditableExercise(ctx, args.exerciseId, userId);
+    const existing = await requireEditableExercise(
+      ctx,
+      args.exerciseId,
+      userId,
+    );
 
     const parsedName = parseExerciseName(args.name);
     if (parsedName.kind === "error") {
@@ -174,6 +179,10 @@ export const update = mutation({
       equipment: args.equipment,
       isBodyweight: args.isBodyweight,
     });
+
+    if (existing.isBodyweight !== args.isBodyweight) {
+      await recomputeExerciseRecords(ctx, userId, [args.exerciseId]);
+    }
 
     return null;
   },

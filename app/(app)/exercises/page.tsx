@@ -9,8 +9,10 @@ import {
   Search,
   StickyNote,
   Trash2,
+  TrendingUp,
   X,
 } from "lucide-react";
+import Link from "next/link";
 import { useMemo, useState } from "react";
 import { DeleteExerciseDialog } from "@/components/exercises/DeleteExerciseDialog";
 import {
@@ -334,6 +336,19 @@ export default function ExercisesPage() {
                     </div>
 
                     <div className="flex flex-wrap items-center gap-2 shrink-0">
+                      <Button asChild variant="outline" size="sm">
+                        <Link
+                          href={`/progression/${exercise._id}`}
+                          aria-label={`View progression for ${exercise.name}`}
+                        >
+                          <TrendingUp
+                            className="size-4 text-primary"
+                            aria-hidden="true"
+                          />
+                          <span>Progress</span>
+                        </Link>
+                      </Button>
+
                       <Button
                         type="button"
                         variant={hasNote ? "outline" : "secondary"}
