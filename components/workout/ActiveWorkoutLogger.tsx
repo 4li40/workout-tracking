@@ -67,21 +67,16 @@ import {
   saveWorkoutSetDraft,
   writeWorkoutDraft,
 } from "@/lib/workoutDraftStorage";
+import {
+  type ActiveWorkoutPickerTarget,
+  getActiveWorkoutPickerConfig,
+} from "./activeWorkoutPicker";
 import { DiscardWorkoutDialog } from "./DiscardWorkoutDialog";
 import { FinishWorkoutDialog } from "./FinishWorkoutDialog";
 import { RestTimerBar } from "./RestTimerBar";
 import type { WorkoutDetail, WorkoutExerciseDetail } from "./types";
 import { WorkoutExerciseCard } from "./WorkoutExerciseCard";
 import type { UpsertSetCommitPayload } from "./WorkoutSetRow";
-
-type ExercisePickerTarget =
-  | { readonly kind: "add" }
-  | {
-      readonly kind: "swap";
-      readonly workoutExerciseId: Id<"workoutExercises">;
-      readonly currentExerciseId: Id<"exercises">;
-      readonly currentExerciseName: string;
-    };
 
 function ElapsedHeaderTimer({ startedAt }: { readonly startedAt: number }) {
   const [nowMs, setNowMs] = useState(() => getEstimatedServerNowMs());
@@ -392,7 +387,7 @@ export function ActiveWorkoutLogger({
   const [actionError, setActionError] = useState<string | null>(null);
 
   const [pickerOpen, setPickerOpen] = useState(false);
-  const [pickerTarget, setPickerTarget] = useState<ExercisePickerTarget>({
+  const [pickerTarget, setPickerTarget] = useState<ActiveWorkoutPickerTarget>({
     kind: "add",
   });
   const [finishOpen, setFinishOpen] = useState(false);
@@ -902,6 +897,7 @@ export function ActiveWorkoutLogger({
 
   const draftChangeCount =
     recoveredDraft !== null ? countDraftChanges(recoveredDraft) : 0;
+  const pickerConfig = getActiveWorkoutPickerConfig(pickerTarget, workout._id);
 
   return (
     <div className="max-w-2xl mx-auto px-4 pt-4 pb-32 sm:px-6 sm:pt-6 space-y-4">
@@ -1336,33 +1332,15 @@ export function ActiveWorkoutLogger({
       <ExercisePickerDialog
         open={pickerOpen}
         onOpenChange={setPickerOpen}
-        mode={pickerTarget.kind === "swap" ? "single" : "multi"}
-        resetKey={
-          pickerTarget.kind === "swap"
-            ? `swap-${pickerTarget.workoutExerciseId}`
-            : `add-${workout._id}`
-        }
-        title={
-          pickerTarget.kind === "swap"
-            ? `Swap ${pickerTarget.currentExerciseName}`
-            : "Add exercises"
-        }
-        description={
-          pickerTarget.kind === "swap"
-            ? "Choose a replacement movement. Existing sets stay ready for the new lift."
-            : "Tap Add on any lifts you want to include in this workout."
-        }
-        actionLabel={pickerTarget.kind === "swap" ? "Swap" : "Add"}
-        busyActionLabel={
-          pickerTarget.kind === "swap" ? "Swapping..." : "Adding..."
-        }
+        mode={pickerConfig.mode}
+        resetKey={pickerConfig.resetKey}
+        title={pickerConfig.title}
+        description={pickerConfig.description}
+        actionLabel={pickerConfig.actionLabel}
+        busyActionLabel={pickerConfig.busyActionLabel}
         existingLabel="In workout"
         existingExerciseIds={existingExerciseIds}
-        excludeExerciseId={
-          pickerTarget.kind === "swap"
-            ? pickerTarget.currentExerciseId
-            : undefined
-        }
+        excludeExerciseId={pickerConfig.excludeExerciseId}
         onSelectExercise={async (exerciseId) => {
           if (pickerTarget.kind === "swap") {
             const targetWorkoutExercise = workout.exercises.find(
@@ -1385,11 +1363,7 @@ export function ActiveWorkoutLogger({
           });
           setSelectedSetId(created.setId);
         }}
-        errorFallback={
-          pickerTarget.kind === "swap"
-            ? "Could not swap exercise. Please try again."
-            : "Could not add exercise to workout. Please try again."
-        }
+        errorFallback={pickerConfig.errorFallback}
       />
 
       <FinishWorkoutDialog
