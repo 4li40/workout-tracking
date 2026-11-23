@@ -1,35 +1,5 @@
-import { TrendingUp } from "lucide-react";
-import { Card } from "@/components/ui/card";
+import { redirect } from "next/navigation";
 
 export default function ProgressPage() {
-  return (
-    <div className="max-w-4xl mx-auto px-4 py-6 sm:px-6 sm:py-8 space-y-6">
-      <header className="space-y-1">
-        <h1 className="text-2xl font-semibold tracking-tight text-foreground">
-          Progress
-        </h1>
-        <p className="text-sm text-muted-foreground">
-          Track strength trends and personal records across every lift.
-        </p>
-      </header>
-
-      <Card asChild>
-        <section className="p-6 sm:p-8 space-y-4">
-          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-accent text-primary">
-            <TrendingUp className="h-5 w-5" aria-hidden="true" />
-          </div>
-          <div className="space-y-1">
-            <h2 className="text-base font-semibold text-foreground">
-              Progression charts coming soon
-            </h2>
-            <p className="text-sm text-muted-foreground">
-              Per-exercise charts for estimated 1RM, top-set weight, session
-              volume, and bodyweight rep records will populate as you log
-              workouts.
-            </p>
-          </div>
-        </section>
-      </Card>
-    </div>
-  );
+  redirect("/progression");
 }
