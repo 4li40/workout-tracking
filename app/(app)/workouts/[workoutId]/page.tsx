@@ -8,11 +8,16 @@ import {
   Clock,
   Dumbbell,
   History,
+  Pencil,
+  Trash2,
   TrendingUp,
+  Trophy,
 } from "lucide-react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { useState } from "react";
+import { DeleteCompletedWorkoutDialog } from "@/components/history/DeleteCompletedWorkoutDialog";
+import { EditCompletedWorkoutDialog } from "@/components/history/EditCompletedWorkoutDialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -22,6 +27,7 @@ import type { WorkoutDetail } from "@/components/workout/types";
 import { WorkoutRouteErrorBoundary } from "@/components/workout/WorkoutRouteErrorBoundary";
 import { api } from "@/convex/_generated/api";
 import { EQUIPMENT_LABELS, MUSCLE_GROUP_LABELS } from "@/convex/lib/exercises";
+import { PR_TYPE_LABELS } from "@/convex/lib/prEngine";
 import {
   DEFAULT_REST_SECONDS,
   DEFAULT_WEIGHT_UNIT,
@@ -37,22 +43,63 @@ import {
   WEIGHT_EPSILON_KG,
 } from "@/convex/lib/workouts";
 
+function formatCompletedVolume(
+  workingVolumeKg: number,
+  bodyweightWorkingReps: number,
+  unit: WeightUnit,
+): string {
+  const hasWeighted = workingVolumeKg > WEIGHT_EPSILON_KG;
+  const hasBodyweight = bodyweightWorkingReps > 0;
+  const bwLabel = `${bodyweightWorkingReps} BW ${bodyweightWorkingReps === 1 ? "rep" : "reps"}`;
+
+  if (hasWeighted && hasBodyweight) {
+    return `${formatWeightFromKg(workingVolumeKg, unit)} ${unit} + ${bwLabel}`;
+  }
+  if (hasWeighted) {
+    return `${formatWeightFromKg(workingVolumeKg, unit)} ${unit}`;
+  }
+  if (hasBodyweight) {
+    return bwLabel;
+  }
+  return `0 ${unit}`;
+}
+
 function CompletedWorkoutSummary({
   workout,
   unit,
+  defaultRestSeconds,
+  onDeletingChange,
+  onDeletedRedirecting,
 }: {
   readonly workout: WorkoutDetail;
   readonly unit: WeightUnit;
+  readonly defaultRestSeconds: number;
+  readonly onDeletingChange: (deleting: boolean) => void;
+  readonly onDeletedRedirecting: () => void;
 }) {
+  const router = useRouter();
+  const [editOpen, setEditOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+
   const summary = computeWorkoutVolumeSummary(workout.exercises);
+  const workingSetCount = workout.exercises.reduce(
+    (sum, exercise) =>
+      sum +
+      exercise.sets.filter(
+        (set) =>
+          set.completed &&
+          SET_TYPE_META[set.setType].countsTowardVolumeAndProgression,
+      ).length,
+    0,
+  );
+  const hasWarmups = summary.completedSets > workingSetCount;
   const finishedAt = workout.finishedAt ?? workout.startedAt;
   const durationLabel = formatElapsedDuration(finishedAt - workout.startedAt);
-  const volumeLabel =
-    summary.workingVolumeKg > 0
-      ? `${formatWeightFromKg(summary.workingVolumeKg, unit)} ${unit}`
-      : summary.bodyweightWorkingReps > 0
-        ? `${summary.bodyweightWorkingReps} BW reps`
-        : `0 ${unit}`;
+  const volumeLabel = formatCompletedVolume(
+    summary.workingVolumeKg,
+    summary.bodyweightWorkingReps,
+    unit,
+  );
 
   const finishedDateLabel = new Date(finishedAt).toLocaleDateString(undefined, {
     month: "short",
@@ -89,6 +136,18 @@ function CompletedWorkoutSummary({
               <Badge variant="secondary">
                 {workout.templateId !== undefined ? "Routine" : "Freestyle"}
               </Badge>
+              {workout.totalPrCount > 0 && (
+                <Badge
+                  variant="warning"
+                  className="gap-1 px-3 py-1 tabular-nums"
+                >
+                  <Trophy className="size-3.5" aria-hidden="true" />
+                  <span>
+                    {workout.totalPrCount}{" "}
+                    {workout.totalPrCount === 1 ? "PR" : "PRs"}
+                  </span>
+                </Badge>
+              )}
             </div>
             <span className="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
               <Calendar className="size-3.5" aria-hidden="true" />
@@ -112,10 +171,15 @@ function CompletedWorkoutSummary({
             </div>
             <div>
               <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-                Sets
+                Working sets
               </p>
               <p className="text-sm font-semibold text-foreground tabular-nums">
-                {summary.completedSets}
+                {workingSetCount}
+                {hasWarmups && (
+                  <span className="ml-1 text-xs font-normal text-muted-foreground">
+                    ({summary.completedSets} total)
+                  </span>
+                )}
               </p>
             </div>
             <div>
@@ -138,6 +202,28 @@ function CompletedWorkoutSummary({
               </p>
             </div>
           )}
+
+          <div className="flex flex-wrap items-center justify-end gap-2 border-t border-border pt-3">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setEditOpen(true)}
+            >
+              <Pencil className="size-4 text-primary" aria-hidden="true" />
+              <span>Edit workout</span>
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => setDeleteOpen(true)}
+              className="text-muted-foreground hover:bg-destructive-tint hover:text-destructive"
+            >
+              <Trash2 className="size-4" aria-hidden="true" />
+              <span>Delete workout</span>
+            </Button>
+          </div>
         </section>
       </Card>
 
@@ -151,15 +237,25 @@ function CompletedWorkoutSummary({
           return (
             <Card asChild key={exercise._id}>
               <article className="p-4 sm:p-5 space-y-3">
-                <div className="space-y-1.5">
-                  <div className="flex items-center gap-2">
+                <div className="space-y-2">
+                  <div className="flex flex-wrap items-center gap-2">
                     <Badge variant="accent" className="tabular-nums">
                       #{index + 1}
                     </Badge>
                     <h2 className="text-base font-semibold text-foreground">
-                      {exercise.exerciseName}
+                      <Link
+                        href={`/progression/${exercise.exerciseId}`}
+                        className="group inline-flex items-center gap-1.5 transition-colors hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:rounded-md"
+                      >
+                        <span>{exercise.exerciseName}</span>
+                        <TrendingUp
+                          className="size-3.5 text-muted-foreground transition-colors group-hover:text-primary"
+                          aria-hidden="true"
+                        />
+                      </Link>
                     </h2>
                   </div>
+
                   <div className="flex flex-wrap items-center gap-1.5">
                     <Badge variant="secondary">
                       {MUSCLE_GROUP_LABELS[exercise.muscleGroup]}
@@ -170,6 +266,12 @@ function CompletedWorkoutSummary({
                     {exercise.isBodyweight && (
                       <Badge variant="accent">Bodyweight</Badge>
                     )}
+                    {exercise.prTypes.map((prType) => (
+                      <Badge key={prType} variant="warning" className="gap-1">
+                        <Trophy className="size-3" aria-hidden="true" />
+                        <span>{PR_TYPE_LABELS[prType]}</span>
+                      </Badge>
+                    ))}
                   </div>
                 </div>
 
@@ -240,6 +342,26 @@ function CompletedWorkoutSummary({
           );
         })}
       </div>
+
+      <EditCompletedWorkoutDialog
+        open={editOpen}
+        onOpenChange={setEditOpen}
+        workout={workout}
+        unit={unit}
+        defaultRestSeconds={defaultRestSeconds}
+      />
+
+      <DeleteCompletedWorkoutDialog
+        open={deleteOpen}
+        onOpenChange={setDeleteOpen}
+        workoutId={workout._id}
+        workoutTitle={workout.title}
+        onDeletingChange={onDeletingChange}
+        onDeleted={() => {
+          onDeletedRedirecting();
+          router.replace("/history");
+        }}
+      />
     </div>
   );
 }
@@ -248,6 +370,8 @@ function WorkoutDetailContent({ workoutId }: { readonly workoutId: string }) {
   const { isAuthenticated } = useConvexAuth();
   const [discardInFlight, setDiscardInFlight] = useState(false);
   const [discardedRedirecting, setDiscardedRedirecting] = useState(false);
+  const [deleteInFlight, setDeleteInFlight] = useState(false);
+  const [deletedRedirecting, setDeletedRedirecting] = useState(false);
   const workout = useQuery(
     api.workouts.get,
     isAuthenticated && workoutId.length > 0 ? { workoutId } : "skip",
@@ -263,6 +387,18 @@ function WorkoutDetailContent({ workoutId }: { readonly workoutId: string }) {
         <Card>
           <CardContent className="p-6 text-sm text-muted-foreground">
             Workout discarded. Returning to workouts...
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  if (deletedRedirecting || (deleteInFlight && workout === null)) {
+    return (
+      <div className="max-w-2xl mx-auto px-4 py-6 sm:px-6 sm:py-8">
+        <Card>
+          <CardContent className="p-6 text-sm text-muted-foreground">
+            Workout deleted. Returning to history...
           </CardContent>
         </Card>
       </div>
@@ -315,7 +451,8 @@ function WorkoutDetailContent({ workoutId }: { readonly workoutId: string }) {
                 Workout not found
               </h1>
               <p className="text-sm text-muted-foreground">
-                This workout may have been discarded or the link is invalid.
+                This workout may have been discarded, deleted, or the link is
+                invalid.
               </p>
             </div>
             <div>
@@ -337,7 +474,15 @@ function WorkoutDetailContent({ workoutId }: { readonly workoutId: string }) {
     appShellState.settings?.defaultRestSeconds ?? DEFAULT_REST_SECONDS;
 
   if (workout.status === "completed") {
-    return <CompletedWorkoutSummary workout={workout} unit={unit} />;
+    return (
+      <CompletedWorkoutSummary
+        workout={workout}
+        unit={unit}
+        defaultRestSeconds={defaultRestSeconds}
+        onDeletingChange={setDeleteInFlight}
+        onDeletedRedirecting={() => setDeletedRedirecting(true)}
+      />
+    );
   }
 
   const draftScopeId = appShellState.settings?._id ?? "default";
