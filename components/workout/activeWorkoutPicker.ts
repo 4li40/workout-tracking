@@ -39,10 +39,10 @@ export function getActiveWorkoutPickerConfig(
   }
 
   return {
-    mode: "multi",
+    mode: "single",
     resetKey: `add-${workoutId}`,
-    title: "Add exercises",
-    description: "Tap Add on any lifts you want to include in this workout.",
+    title: "Add exercise",
+    description: "Choose an exercise to add to this workout.",
     actionLabel: "Add",
     busyActionLabel: "Adding...",
     excludeExerciseId: undefined,
