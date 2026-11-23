@@ -55,6 +55,27 @@ export interface ExercisePickerDialogProps {
   readonly errorFallback: string;
 }
 
+export async function completeExerciseSelection({
+  mode,
+  exerciseId,
+  onSelectExercise,
+  onClose,
+  onSelectedInMulti,
+}: {
+  readonly mode: "multi" | "single";
+  readonly exerciseId: Id<"exercises">;
+  readonly onSelectExercise: (exerciseId: Id<"exercises">) => Promise<void>;
+  readonly onClose: () => void;
+  readonly onSelectedInMulti: (exerciseId: Id<"exercises">) => void;
+}): Promise<void> {
+  await onSelectExercise(exerciseId);
+  if (mode === "single") {
+    onClose();
+    return;
+  }
+  onSelectedInMulti(exerciseId);
+}
+
 function ExercisePickerBody({
   mode,
   actionLabel,
@@ -160,16 +181,21 @@ function ExercisePickerBody({
     onBusyChange(true);
     setError(null);
     try {
-      await onSelectExercise(exerciseId);
-      if (mode === "single") {
-        onBusyChange(false);
-        onClose();
-        return;
-      }
-      setSelectedThisSession((previous) => {
-        const next = new Set(previous);
-        next.add(exerciseId);
-        return next;
+      await completeExerciseSelection({
+        mode,
+        exerciseId,
+        onSelectExercise,
+        onClose: () => {
+          onBusyChange(false);
+          onClose();
+        },
+        onSelectedInMulti: (selectedId) => {
+          setSelectedThisSession((previous) => {
+            const next = new Set(previous);
+            next.add(selectedId);
+            return next;
+          });
+        },
       });
     } catch (err) {
       setError(getConvexErrorMessage(err, errorFallback));
